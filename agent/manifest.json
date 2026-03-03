@@ -1,0 +1,42 @@
+{
+  "id": "shopping-agent",
+  "name": "Shopping Truth Agent",
+  "version": "1.0.0",
+  "description": "AI shopping advisor that analyzes products across 9 platforms, detects fake reviews, predicts price drops, and finds better alternatives. Saves you money and regret.",
+  "author": "Nextbase Marketplace",
+  "enabled": true,
+  "concurrency": 3,
+  "requiredEnv": [
+    "OPENAI_API_KEY"
+  ],
+  "optionalEnv": [],
+  "tags": ["shopping", "e-commerce", "price-tracking", "reviews", "consumer"],
+  "icon": "🛒",
+  "category": "productivity",
+  "features": [
+    "Multi-platform analysis (Amazon, Reddit, YouTube, Twitter, etc.)",
+    "ML-powered fake review detection",
+    "Price drop prediction with historical data",
+    "Regret detector (temporal sentiment analysis)",
+    "Alternative product recommendations",
+    "Automatic coupon discovery",
+    "Battle Mode (AI agents debate pros/cons)",
+    "Ethics & carbon footprint scoring"
+  ],
+  "pricing": {
+    "model": "freemium",
+    "free": {
+      "limit": "10 analyses per day",
+      "features": ["Amazon + Reddit only", "Basic fake review detection"]
+    },
+    "premium": {
+      "price": "$9.99/month",
+      "features": "All 10 features unlocked, unlimited analyses"
+    }
+  },
+  "examples": [
+    "Analyze this product: https://amazon.com/dp/B08N5WRWNW",
+    "Find best noise-cancelling headphones under $300",
+    "Is the Sony WH-1000XM5 worth buying?"
+  ]
+}
