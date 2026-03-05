@@ -225,6 +225,15 @@ async def scrape_price_history(asin: str) -> Dict:
         from .price_scraper import get_price_history
         from .price_analyzer import PriceAnalyzer
         from .price_predictor import PricePredictor, generate_final_recommendation
+
+# Feature 7 Phase 2 imports
+try:
+    from .price_predictor_arima import create_best_predictor
+    from .competitor_prices import compare_with_competitors
+except ImportError:
+    create_best_predictor = None
+    compare_with_competitors = None
+
         
         # 1. Get real price history
         price_data = await get_price_history(asin, months=6)
@@ -238,16 +247,32 @@ async def scrape_price_history(asin: str) -> Dict:
         analysis = analyzer.analyze(price_data)
         
         # 3. ML predictions
-        predictor = PricePredictor(use_polynomial=True)
+        # Use best available predictor (ARIMA if available, else Polynomial)
+        if create_best_predictor:
+            predictor = create_best_predictor(price_data, prefer_arima=True)
+        else:
+            predictor = PricePredictor(use_polynomial=True)
         predictions = predictor.predict_next_30_days(price_data)
         upcoming_sales = predictor.check_upcoming_sales()
+        
+        
+        # 3.5. Check competitor prices (optional)
+        competitor_data = None
+        if compare_with_competitors and price_data.get('current_price'):
+            try:
+                competitor_data = await compare_with_competitors(
+                    price_data.get('asin', ''),
+                    price_data['current_price']
+                )
+            except:
+                pass  # Competitor check is optional
         
         # 4. Generate final recommendation
         final_recommendation = generate_final_recommendation(
             analysis, predictions, upcoming_sales
         )
         
-        return {
+        result = {
             "has_data": True,
             "source": price_data['source'],
             "current_price": price_data['current_price'],
@@ -262,6 +287,12 @@ async def scrape_price_history(asin: str) -> Dict:
             "upcoming_sales": upcoming_sales,
             "recommendation": final_recommendation
         }
+        
+        # Add competitor data if available
+        if competitor_data and competitor_data.get('has_data'):
+            result['competitors'] = competitor_data
+        
+        return result
     
     except Exception as e:
         # Fallback to old calendar-based system
