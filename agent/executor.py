@@ -1,7 +1,5 @@
 # executor.py — Beautiful output for all 10 features
 
-import asyncio
-import httpx
 from typing import AsyncGenerator
 from app.core.sse import sse_event, sse_error
 from app.core.config import settings
@@ -34,15 +32,15 @@ async def execute(
     
     yield sse_event("status", "🔍 Analyzing product across 10+ data sources...")
     
-    async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
-        # Phase 1: Core scraping
+    # No longer need httpx client - Scrapling handles requests internally
+    # No longer need httpx client - Scrapling handles requests internally
         yield sse_event("status", "⏳ Scraping Amazon, Reddit, YouTube, Twitter...")
         
         amazon_data, reddit_data, youtube_data, twitter_data = await asyncio.gather(
-            scrape_amazon(client, asin),
-            scrape_reddit(client, f"amazon {asin}"),
-            scrape_youtube(client, ""),
-            scrape_twitter(client, ""),
+            scrape_amazon(asin),
+            scrape_reddit( f"amazon {asin}"),
+            scrape_youtube( ""),
+            scrape_twitter( ""),
             return_exceptions=True
         )
         
@@ -55,9 +53,9 @@ async def execute(
         
         # Update with product name
         if product_name:
-            reddit_data = await scrape_reddit(client, product_name) if not isinstance(reddit_data, dict) or not reddit_data.get("found") else reddit_data
-            youtube_data = await scrape_youtube(client, product_name) if isinstance(youtube_data, dict) else youtube_data
-            twitter_data = await scrape_twitter(client, product_name) if isinstance(twitter_data, dict) else twitter_data
+            reddit_data = await scrape_reddit( product_name) if not isinstance(reddit_data, dict) or not reddit_data.get("found") else reddit_data
+            youtube_data = await scrape_youtube( product_name) if isinstance(youtube_data, dict) else youtube_data
+            twitter_data = await scrape_twitter( product_name) if isinstance(twitter_data, dict) else twitter_data
         
         # Phase 2: Analysis
         yield sse_event("status", "🕵️ Detecting fake reviews & analyzing patterns...")
@@ -75,10 +73,10 @@ async def execute(
         yield sse_event("status", "💰 Checking prices, alternatives, coupons, ethics...")
         
         price_pred, alternatives, coupons, ethics = await asyncio.gather(
-            scrape_price_history(client, asin),
-            find_alternatives(client, product_name, amazon_data.get("price", "")),
-            find_coupons(client, product_name, asin),
-            calculate_ethics_score(client, product_name, brand),
+            scrape_price_history( asin),
+            find_alternatives( product_name, amazon_data.get("price", "")),
+            find_coupons( product_name, asin),
+            calculate_ethics_score( product_name, brand),
             return_exceptions=True
         )
         
