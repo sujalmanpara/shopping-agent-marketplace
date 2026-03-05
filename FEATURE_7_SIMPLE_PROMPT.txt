@@ -1,0 +1,15 @@
+I need you to build a real-time price tracking and prediction system for Amazon products. Currently I only have calendar-based guessing (like "Prime Day in 134 days") which is 30% accurate. I need to upgrade this to actually scrape real price history and use machine learning to predict future prices with 80%+ accuracy.
+
+The system needs to scrape CamelCamelCamel or Keepa to get the last 6 months of price history for any Amazon ASIN. From that data, analyze whether the current price is good by comparing it to the 6-month average and all-time lowest price. Categorize deals as excellent (within 10% of lowest), good (below average), fair (near average), or poor (above average). Show users the exact percentages like "current price is 12% below average" and "15% above all-time low".
+
+Build a machine learning price predictor using scikit-learn that trains on the historical price data and predicts the next 30 days of prices. The predictions should include the predicted lowest price in the next month, the best day to buy, drop probability (what percentage chance the price will go down), and expected savings compared to current price. Use LinearRegression or a better model if you can justify it, and include confidence scores.
+
+Also create a sale event calendar that checks for upcoming sales like Prime Day (July 15), Black Friday (November 24), Cyber Monday (November 27), and Prime Early Access (October 10). If a major sale is within 60 days, factor that into the recommendation. The system should tell users whether to buy now, wait for the predicted price drop, or wait for the upcoming sale event.
+
+The final output needs to show current price, 6-month price history with average/lowest/highest, deal quality assessment, price trend (increasing or decreasing), ML predictions for next 30 days, upcoming sale events, and a clear recommendation with reasoning. For example: "WAIT 18 days - price likely to drop to $245 (12% savings)" or "BUY NOW - price is at 6-month low".
+
+Technical requirements: use StealthyFetcher from scrapling to avoid bot detection when scraping, complete the entire analysis in under 6 seconds, cache price data for 24 hours to avoid re-scraping, handle errors gracefully with fallback to calendar-based predictions if scraping fails, and make sure it works for 95%+ of Amazon products. The ML model should process in under 100ms and use only scikit-learn (no GPU required).
+
+Provide three separate Python files: price_scraper.py with functions to scrape CamelCamelCamel and Keepa, price_analyzer.py with a PriceAnalyzer class that compares current price to historical data, and price_predictor.py with a PricePredictor class that does ML predictions and checks the sale calendar. Also update the existing scrape_price_history function in scrapers.py to integrate all three components.
+
+The system must be better than the current 30% accuracy calendar guessing. Target 80%+ accuracy on price drop predictions, meaning when it says prices will drop, they actually do. Include test cases for price below average, price near all-time low, and upcoming sale events.
