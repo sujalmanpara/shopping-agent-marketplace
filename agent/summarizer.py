@@ -143,13 +143,57 @@ def format_beautiful_output(
             output.append(f"\n{i}. {alt['title'][:60]}...")
             output.append(f"   💰 {alt['price']} | ⭐ {alt['rating']}/5 | 💵 Save {alt['savings']}")
     
-    # Feature 9: Coupons
+    # Feature 9: Coupon Sniper
+    output.append("\n" + "─" * 60)
+    output.append("🎯 COUPON SNIPER (Feature 9)")
+    output.append("─" * 60)
+
     if coupons and coupons.get('found', 0) > 0:
-        output.append("\n" + "─" * 60)
-        output.append("🎟️  COUPON CODES (Feature 9)")
-        output.append("─" * 60)
         for coupon in coupons.get('coupons', []):
-            output.append(f"💰 **{coupon['code']}:** {coupon['discount']}")
+            conf = coupon.get('confidence', 0)
+            badge = "✅" if conf >= 0.8 else "⚠️"
+            code = coupon.get('code', '')
+            if code in ("CLIP_COUPON",):
+                output.append(f"  {badge} 🏷️ **Clip Coupon:** {coupon['discount']}")
+            elif code == "SUBSCRIBE_SAVE":
+                output.append(f"  {badge} 📦 **Subscribe & Save:** {coupon['discount']}")
+            elif code != "NO_CODE":
+                output.append(f"  {badge} 💰 **{code}:** {coupon['discount']}")
+            else:
+                output.append(f"  {badge} 🏷️ **Deal:** {coupon['discount']}")
+    else:
+        output.append("  ❌ No verified coupon codes available")
+        output.append("  ℹ️  We show nothing rather than unverified codes")
+
+    # Cashback
+    if coupons and coupons.get('cashback'):
+        output.append("")
+        output.append("  💸 **CASHBACK OFFERS:**")
+        for cb in coupons['cashback']:
+            output.append(f"    • {cb['platform']}: {cb['rate']} cashback {('— ' + cb['note']) if cb.get('note') else ''}")
+
+    # Credit Card Benefits
+    if coupons and coupons.get('credit_cards'):
+        output.append("")
+        output.append("  💳 **CREDIT CARD BENEFITS:**")
+        for card in coupons['credit_cards']:
+            special = f" {card['special']}" if card.get('special') else ""
+            savings = f" (save ~₹{card['savings_estimate']:.0f})" if card.get('savings_estimate') else ""
+            output.append(f"    • **{card['card']}:** {card['benefit']}{savings}{special}")
+            output.append(f"      💡 {card['shopping_tip']}")
+
+    # Best Combo
+    if coupons and coupons.get('best_combo'):
+        combo = coupons['best_combo']
+        output.append("")
+        output.append("  🏆 **BEST COMBO:**")
+        output.append(f"    {combo['strategy']}")
+        output.append(f"    💵 Save ₹{combo['total_savings']:.0f} ({combo['savings_percentage']}% off!)")
+        output.append(f"    🏷️ Final price: ₹{combo['final_price']:.0f} (was ₹{combo['original_price']:.0f})")
+
+    # Advice
+    if coupons and coupons.get('advice'):
+        output.append(f"\n  📌 {coupons['advice']}")
     
     # Feature 10: Ethics & Carbon
     if ethics and ethics.get('carbon_footprint'):

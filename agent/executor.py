@@ -75,7 +75,7 @@ async def execute(
         price_pred, alternatives, coupons, ethics = await asyncio.gather(
             scrape_price_history( asin),
             find_alternatives( product_name, amazon_data.get("price", "")),
-            find_coupons( product_name, asin),
+            find_coupons( product_name, asin, amazon_data.get("price_numeric", None), "IN"),
             calculate_ethics_score( product_name, brand),
             return_exceptions=True
         )

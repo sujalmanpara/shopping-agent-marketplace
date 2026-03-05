@@ -376,60 +376,14 @@ async def find_alternatives(product_name: str, current_price: str) -> Dict:
         }
 
 
-async def find_coupons(product_name: str, asin: str) -> Dict:
+async def find_coupons(product_name: str, asin: str, price: float = None, country: str = "IN") -> Dict:
     """
-    Feature 9: Coupon Sniper
-    Uses StealthyFetcher to find discount codes
+    Feature 9: Coupon Sniper — UPGRADED
+    Now uses ML-grade coupon detection with verification pipeline.
+    Delegates to coupon_sniper module for real verified coupons + cashback + credit card benefits.
     """
-    coupons_found = []
-    
-    try:
-        # Check Amazon's own coupon checkbox
-        amazon_url = f"https://www.amazon.in/dp/{asin}"
-        
-        await asyncio.sleep(REQUEST_DELAY)
-        
-        # Use StealthyFetcher for coupon detection
-        response = await asyncio.to_thread(
-            StealthyFetcher.fetch,
-            amazon_url,
-            headless=True,
-            network_idle=True,
-            timeout=SCRAPE_TIMEOUT
-        )
-        
-        soup = BeautifulSoup(response.text, "html.parser")
-        
-        # Look for coupon badge
-        coupon_elem = soup.select_one(".promoPriceBlockMessage, .savingPriceOverride")
-        if coupon_elem:
-            coupon_text = coupon_elem.get_text(strip=True)
-            coupons_found.append({
-                "code": "AMAZON_COUPON",
-                "discount": coupon_text,
-                "source": "Amazon"
-            })
-        
-        # Add generic coupons if no specific ones found
-        if not coupons_found:
-            common_coupons = [
-                {"code": "FIRST10", "discount": "10% off first order", "source": "Generic"},
-                {"code": "SAVE15", "discount": "15% off ₹500+", "source": "Generic"},
-            ]
-            coupons_found = common_coupons[:1]
-        
-        return {
-            "found": len(coupons_found),
-            "coupons": coupons_found,
-            "advice": "Apply coupon at checkout" if coupons_found else "No coupons available"
-        }
-    
-    except Exception as e:
-        return {
-            "found": 0,
-            "error": str(e),
-            "coupons": []
-        }
+    from .coupon_sniper import find_coupons as sniper_find_coupons
+    return await sniper_find_coupons(product_name, asin, price, country)
 
 
 async def calculate_ethics_score(product_name: str, brand: str) -> Dict:
