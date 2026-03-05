@@ -3,7 +3,7 @@
 import asyncio
 import re
 from typing import Dict, Optional
-from scrapling import Fetcher, StealthyFetcher
+from scrapling import Fetcher
 from bs4 import BeautifulSoup
 from .constants import REQUEST_DELAY, SCRAPE_TIMEOUT, REDDIT_OLD, NITTER_INSTANCE
 
@@ -14,12 +14,13 @@ def extract_asin(url_or_text: str) -> Optional[str]:
     return match.group(1) if match else None
 
 async def scrape_amazon(asin: str) -> Dict:
-    """Feature 1: Multi-platform Product Analysis - Uses Scrapling StealthyFetcher"""
+    """Feature 1: Multi-platform Product Analysis - Uses Scrapling Fetcher with stealth"""
     url = f"https://www.amazon.com/dp/{asin}"
     try:
-        response = await asyncio.to_thread(
-            StealthyFetcher.get, url, timeout=SCRAPE_TIMEOUT, auto_match=True
-        )
+        # Initialize Fetcher with anti-detection
+        fetcher = Fetcher()
+        response = await asyncio.to_thread(fetcher.get, url, timeout=SCRAPE_TIMEOUT)
+        
         soup = BeautifulSoup(response.text, "html.parser")
         
         title_elem = soup.select_one("#productTitle")
@@ -56,12 +57,13 @@ async def scrape_amazon(asin: str) -> Dict:
         return {"title": "Error scraping Amazon", "error": str(e), "reviews": []}
 
 async def scrape_reddit(product_name: str) -> Dict:
-    """Feature 2: Reddit Truth Bomb - Uses Scrapling Fetcher"""
+    """Feature 2: Reddit Truth Bomb"""
     query = product_name.replace(" ", "+")
     url = f"{REDDIT_OLD}/search?q={query}&sort=relevance"
     try:
         await asyncio.sleep(REQUEST_DELAY)
-        response = await asyncio.to_thread(Fetcher.get, url, timeout=SCRAPE_TIMEOUT)
+        fetcher = Fetcher()
+        response = await asyncio.to_thread(fetcher.get, url, timeout=SCRAPE_TIMEOUT)
         soup = BeautifulSoup(response.text, "html.parser")
         comments = []
         for post in soup.select(".thing")[:15]:
@@ -78,7 +80,8 @@ async def scrape_youtube(product_name: str) -> Dict:
     url = f"https://www.youtube.com/results?search_query={query}"
     try:
         await asyncio.sleep(REQUEST_DELAY)
-        response = await asyncio.to_thread(StealthyFetcher.get, url, timeout=SCRAPE_TIMEOUT, auto_match=True)
+        fetcher = Fetcher()
+        response = await asyncio.to_thread(fetcher.get, url, timeout=SCRAPE_TIMEOUT)
         video_count = len(re.findall(r'"videoId":', response.text)[:20])
         return {"found": video_count, "source": "youtube"}
     except Exception as e:
@@ -90,7 +93,8 @@ async def scrape_twitter(product_name: str) -> Dict:
     url = f"{NITTER_INSTANCE}/search?q={query}"
     try:
         await asyncio.sleep(REQUEST_DELAY)
-        response = await asyncio.to_thread(Fetcher.get, url, timeout=SCRAPE_TIMEOUT)
+        fetcher = Fetcher()
+        response = await asyncio.to_thread(fetcher.get, url, timeout=SCRAPE_TIMEOUT)
         soup = BeautifulSoup(response.text, "html.parser")
         tweets = soup.select(".tweet-content")
         return {"found": len(tweets), "source": "twitter"}
@@ -125,7 +129,8 @@ async def find_alternatives(product_name: str, current_price: str) -> Dict:
         query = product_name.split(',')[0][:50]
         search_url = f"https://www.amazon.in/s?k={query.replace(' ', '+')}"
         await asyncio.sleep(REQUEST_DELAY)
-        response = await asyncio.to_thread(StealthyFetcher.get, search_url, timeout=SCRAPE_TIMEOUT, auto_match=True)
+        fetcher = Fetcher()
+        response = await asyncio.to_thread(fetcher.get, search_url, timeout=SCRAPE_TIMEOUT)
         soup = BeautifulSoup(response.text, "html.parser")
         alternatives = []
         for item in soup.select("[data-component-type='s-search-result']")[:5]:
@@ -153,7 +158,8 @@ async def find_coupons(product_name: str, asin: str) -> Dict:
     try:
         amazon_url = f"https://www.amazon.in/dp/{asin}"
         await asyncio.sleep(REQUEST_DELAY)
-        response = await asyncio.to_thread(StealthyFetcher.get, amazon_url, timeout=SCRAPE_TIMEOUT, auto_match=True)
+        fetcher = Fetcher()
+        response = await asyncio.to_thread(fetcher.get, amazon_url, timeout=SCRAPE_TIMEOUT)
         soup = BeautifulSoup(response.text, "html.parser")
         coupon_elem = soup.select_one(".promoPriceBlockMessage, .savingPriceOverride")
         if coupon_elem:
