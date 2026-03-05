@@ -1,2 +1,4 @@
 scrapling>=0.2.0
 beautifulsoup4>=4.12.0
+scikit-learn>=1.3.0
+numpy>=1.24.0

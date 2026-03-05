@@ -212,68 +212,56 @@ async def scrape_twitter(product_name: str) -> Dict:
 
 async def scrape_price_history(asin: str) -> Dict:
     """
-    Feature 7: Price Drop Prophet (UPGRADED with ML)
-    
-    NEW: Real price tracking + ML predictions
-    - Scrapes CamelCamelCamel/Keepa for 6-month history
-    - Analyzes if current price is good deal
-    - ML predictions for next 30 days
-    - Sale event calendar
+    Feature 7: Price Drop Prophet
+    Predicts price drops around sale events
     """
     try:
-        # Import new modules
-        from .price_scraper import get_price_history
-        from .price_analyzer import PriceAnalyzer
-        from .price_predictor import PricePredictor, generate_final_recommendation
+        from datetime import datetime
+        today = datetime.now()
         
-        # 1. Get real price history
-        price_data = await get_price_history(asin, months=6)
+        # Check if near major sale events
+        prime_day = datetime(today.year, 7, 15)  # Mid-July
+        black_friday = datetime(today.year, 11, 24)  # Late November
         
-        # If scraping failed, fall back to calendar-based
-        if not price_data.get('success'):
-            return await scrape_price_history_fallback(asin)
+        days_to_prime = (prime_day - today).days
+        days_to_black_friday = (black_friday - today).days
         
-        # 2. Analyze current price
-        analyzer = PriceAnalyzer()
-        analysis = analyzer.analyze(price_data)
-        
-        # 3. ML predictions
-        predictor = PricePredictor(use_polynomial=True)
-        predictions = predictor.predict_next_30_days(price_data)
-        upcoming_sales = predictor.check_upcoming_sales()
-        
-        # 4. Generate final recommendation
-        final_recommendation = generate_final_recommendation(
-            analysis, predictions, upcoming_sales
-        )
+        prediction = None
+        if 0 < days_to_prime < 30:
+            prediction = {
+                "event": "Prime Day",
+                "days_away": days_to_prime,
+                "predicted_drop": "15-20%",
+                "advice": f"WAIT {days_to_prime} days for Prime Day discount"
+            }
+        elif 0 < days_to_black_friday < 30:
+            prediction = {
+                "event": "Black Friday",
+                "days_away": days_to_black_friday,
+                "predicted_drop": "20-30%",
+                "advice": f"WAIT {days_to_black_friday} days for Black Friday deals"
+            }
+        else:
+            prediction = {
+                "event": "No major sales soon",
+                "days_away": min(abs(days_to_prime), abs(days_to_black_friday)),
+                "predicted_drop": "5-10%",
+                "advice": "Buy now or wait for seasonal sales"
+            }
         
         return {
             "has_data": True,
-            "source": price_data['source'],
-            "current_price": price_data['current_price'],
-            "history": {
-                "average": price_data['average_price'],
-                "lowest": price_data['lowest_price'],
-                "highest": price_data['highest_price'],
-                "data_points": price_data['data_points']
-            },
-            "analysis": analysis,
-            "prediction": predictions,
-            "upcoming_sales": upcoming_sales,
-            "recommendation": final_recommendation
+            "prediction": prediction,
+            "source": "price_prediction"
         }
     
     except Exception as e:
-        # Fallback to old calendar-based system
-        print(f"ML price prediction failed: {e}, using fallback")
-        return await scrape_price_history_fallback(asin)
+        return {
+            "has_data": False,
+            "error": str(e),
+            "prediction": None
+        }
 
-
-async def scrape_price_history_fallback(asin: str) -> Dict:
-    """
-    Fallback: Calendar-based prediction (old system)
-    Used when scraping fails
-    """
 
 async def find_alternatives(product_name: str, current_price: str) -> Dict:
     """
