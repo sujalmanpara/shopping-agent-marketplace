@@ -63,7 +63,8 @@ def format_beautiful_output(
     alternatives: Dict,
     coupons: Dict,
     ethics: Dict,
-    ai_verdict: str
+    ai_verdict: str,
+    community_data: Dict = None  # 🆕 Feature 2
 ) -> str:
     """
     Format all 10 features into a beautiful, readable output
@@ -108,6 +109,50 @@ def format_beautiful_output(
         output.append(f"📉 **Severity:** {regret_analysis['severity'].upper()}")
     else:
         output.append("✅ **No regret detected** - Ratings stable over time")
+    
+    # Feature 2: Community Truth Bomb 🆕
+    if community_data and community_data.get('success'):
+        output.append("\n" + "─" * 60)
+        output.append("💬 COMMUNITY TRUTH BOMB (Feature 2)")
+        output.append("─" * 60)
+        
+        # Sources used
+        sources_used = community_data.get('sources_used', [])
+        if sources_used:
+            output.append("📊 **Data Sources:**")
+            for source in sources_used:
+                if source['name'] == 'Reddit':
+                    output.append(f"   ✅ Reddit: {source['posts']} posts across {len(source.get('subreddits', []))} subreddits")
+                elif source['name'] == 'Amazon Q&A':
+                    output.append(f"   ✅ Amazon Q&A: {source['questions']} questions/answers")
+                elif source['name'] == 'YouTube':
+                    output.append(f"   ✅ YouTube: {source['comments']} comments from {source.get('videos', 0)} videos")
+        
+        # Sentiment analysis
+        sentiment = community_data.get('sentiment', {})
+        if sentiment:
+            overall = sentiment.get('overall', 'UNKNOWN')
+            breakdown = sentiment.get('breakdown', {})
+            sentiment_emoji = "😊" if overall == "MOSTLY POSITIVE" else "😟" if overall == "MOSTLY NEGATIVE" else "😐"
+            
+            output.append(f"\n{sentiment_emoji} **Overall Sentiment:** {overall}")
+            output.append(f"   👍 Positive: {breakdown.get('positive', 0)}% | 👎 Negative: {breakdown.get('negative', 0)}% | 😐 Neutral: {breakdown.get('neutral', 0)}%")
+        
+        # Common complaints
+        complaints = community_data.get('common_complaints', [])
+        if complaints:
+            output.append("\n⚠️  **Common Complaints:**")
+            for i, complaint in enumerate(complaints[:3], 1):  # Top 3 complaints
+                conf_emoji = "🔴" if complaint['confidence'] > 70 else "🟡" if complaint['confidence'] > 40 else "🟢"
+                output.append(f"   {i}. {conf_emoji} **{complaint['category']}** ({complaint['confidence']}% of discussions)")
+                
+                # Show one example
+                if complaint.get('examples'):
+                    example = complaint['examples'][0]
+                    source_badge = "📱" if example['source'] == 'reddit' else "❓" if example['source'] == 'amazon_qa' else "🎥"
+                    output.append(f"      {source_badge} \"{example['text'][:100]}...\"")
+        else:
+            output.append("\n✅ **No major complaints found** - Community feedback is mostly positive")
     
     # Feature 5: Confidence Score
     output.append("\n" + "─" * 60)
