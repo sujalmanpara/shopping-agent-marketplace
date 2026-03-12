@@ -277,6 +277,9 @@ async def fetch_reddit_discussions(product_name: str, brand: str = "", category:
         async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
             resp = await client.get(url, headers=headers)
             
+            if resp.status_code == 403:
+                latency = (time.time() - start) * 1000
+                return _failure("reddit_http", "Reddit blocks datacenter IPs. Works with PRAW credentials or from non-cloud servers.", latency)
             if resp.status_code != 200:
                 latency = (time.time() - start) * 1000
                 return _failure("reddit_http", f"HTTP {resp.status_code}", latency)
@@ -1115,7 +1118,8 @@ async def fetch_all_sources(asin: str, product_name: str, brand: str = "", count
         "youtube": fetch_youtube_reviews(product_name, keys),
         "keepa": fetch_keepa_history(asin, keys),
         "google_shopping": fetch_google_shopping(product_name, country, keys),
-        "fakespot": fetch_fakespot_grade(asin, country),
+        # Fakespot removed — API defunct (acquired by Mozilla 2023)
+        # Our XGBoost ML model handles fake review detection locally
         "reviewmeta": fetch_reviewmeta(asin),
         "wirecutter": fetch_wirecutter(product_name),
         "rtings": fetch_rtings(product_name),
