@@ -225,12 +225,16 @@ def format_beautiful_output(
     verdict_keyword = "WAIT"
     if ai_verdict:
         upper = ai_verdict.upper()
-        if "BUY" in upper and "AVOID" not in upper and "DON'T BUY" not in upper:
-            verdict_keyword = "BUY"
-            verdict_emoji = "✅"
-        elif "AVOID" in upper or "DON'T" in upper or "DONT" in upper:
+        # Check for WAIT first (most common recommendation)
+        if "WAIT" in upper:
+            verdict_keyword = "WAIT"
+            verdict_emoji = "⏳"
+        elif "AVOID" in upper and "WAIT" not in upper:
             verdict_keyword = "AVOID"
             verdict_emoji = "❌"
+        elif "BUY" in upper and "DON'T BUY" not in upper and "WAIT" not in upper and "AVOID" not in upper:
+            verdict_keyword = "BUY"
+            verdict_emoji = "✅"
         else:
             verdict_emoji = "⏳"
     else:
