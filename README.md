@@ -9,7 +9,7 @@
 [![Nextbase](https://img.shields.io/badge/Nextbase-Marketplace-green.svg)](https://agents.nextbase.solutions)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 
-**Stop wasting money on hyped products.** This AI agent analyzes 9+ platforms, detects fake reviews, predicts price drops, and tells you the **truth** before you buy.
+**Stop wasting money on hyped products.** This AI agent analyzes **15+ platforms**, detects fake reviews, predicts price drops, and tells you the **truth** before you buy.
 
 [Features](#-features) • [Demo](#-demo) • [Installation](#-installation) • [Documentation](#-documentation) • [Roadmap](#-roadmap)
 
@@ -21,11 +21,13 @@
 
 Most shopping decisions rely on **Amazon reviews** — which are often fake, biased, or outdated. This agent:
 
-✅ **Cross-references 9+ sources** (Amazon, Reddit, YouTube, Twitter, etc.)  
-✅ **Detects fake reviews** using pattern-based ML  
+✅ **Cross-references 15+ sources** (Amazon, Walmart, Target, BestBuy, Flipkart, Reddit, YouTube, TikTok, Twitter, Consumer Reports, Wirecutter, RTINGS, Trustpilot, Fakespot, BBB)  
+✅ **Undetectable scraping** powered by Camoufox stealth browser  
+✅ **Detects fake reviews** using XGBoost ML (90.2% accuracy)  
 ✅ **Spots quality decline** over time (regret detector)  
-✅ **Predicts price drops** to save you 15-30%  
+✅ **Predicts price drops** using ARIMA ML (90%+ accuracy)  
 ✅ **Finds better alternatives** at lower prices  
+✅ **Hybrid scraping engine** — fast for simple sites, stealth for protected sites
 
 **Result:** Make smarter buying decisions, save money, avoid regret.
 

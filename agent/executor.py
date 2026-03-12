@@ -9,6 +9,7 @@ from .scrapers import (
     extract_asin, scrape_amazon, scrape_reddit, scrape_youtube, scrape_twitter,
     scrape_price_history, find_alternatives, find_coupons, calculate_ethics_score
 )
+from .stealth_scraper import scrape_all_platforms
 from .analyzers import analyze_fake_reviews, analyze_regret_pattern, calculate_confidence
 from .summarizer import generate_summary, format_beautiful_output
 from .community_feature import community_truth_bomb
@@ -58,6 +59,15 @@ async def execute(
         youtube_data = await scrape_youtube(product_name) if isinstance(youtube_data, dict) else youtube_data
         twitter_data = await scrape_twitter(product_name) if isinstance(twitter_data, dict) else twitter_data
     
+    # Phase 1.5: Multi-Platform Scraping (Feature 1 UPGRADE — Hybrid Camoufox + Scrapling)
+    yield sse_event("status", "🌐 Scraping 15 platforms (Walmart, Target, BestBuy, Flipkart, TikTok, Trustpilot...)")
+    
+    multi_platform_data = await scrape_all_platforms(
+        product_name=product_name,
+        asin=asin,
+        brand=brand
+    )
+    
     # Phase 2: Community Truth Bomb (Feature 2) 🆕
     yield sse_event("status", "💬 Analyzing community discussions (Reddit, Amazon Q&A, YouTube)...")
     
@@ -106,7 +116,8 @@ async def execute(
         coupons if not isinstance(coupons, Exception) else {},
         ethics if not isinstance(ethics, Exception) else {},
         ai_verdict,
-        community_data if not isinstance(community_data, Exception) else {}  # 🆕 Feature 2
+        community_data if not isinstance(community_data, Exception) else {},  # 🆕 Feature 2
+        multi_platform_data if not isinstance(multi_platform_data, Exception) else {}  # 🆕 Feature 1 Upgrade
     )
     
     # Return formatted text result

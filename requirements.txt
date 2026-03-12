@@ -13,3 +13,7 @@ joblib>=1.3.0
 # Community Truth Bomb (Feature 2)
 praw>=7.8.1              # Reddit API wrapper
 yt-dlp>=2026.3.3         # YouTube comments
+
+# Stealth Browser (Feature 1 Upgrade - Hybrid Scraping)
+camoufox[geoip]>=0.4.0   # Anti-detection browser (for hard sites)
+playwright>=1.40.0        # Browser automation (Camoufox dependency)
