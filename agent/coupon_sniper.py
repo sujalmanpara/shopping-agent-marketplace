@@ -165,6 +165,178 @@ CREDIT_CARD_BENEFITS = {
         ],
         "shopping_tip": "Great for booking travel — combine with Ixigo sale periods for best rates"
     },
+
+    # --- India Cards (Expanded) ---
+    "hdfc_millennia": {
+        "name": "HDFC Millennia Credit Card",
+        "country": "IN",
+        "benefits": [
+            {"type": "cashback", "value": "5% cashback on Amazon, Flipkart, Myntra (via SmartBuy)", "category": "shopping"},
+            {"type": "cashback", "value": "2.5% on all online spends", "category": "general"},
+            {"type": "cashback", "value": "1% on offline/wallet spends", "category": "general"},
+        ],
+        "shopping_tip": "Best budget card for online shopping — 5% on major e-commerce via SmartBuy portal"
+    },
+    "hdfc_diners_black": {
+        "name": "HDFC Diners Club Black",
+        "country": "IN",
+        "benefits": [
+            {"type": "points", "value": "5 reward points per ₹150 (3.3% value)", "category": "general"},
+            {"type": "perk", "value": "10x rewards on SmartBuy (flights, Amazon, hotels)", "category": "shopping"},
+            {"type": "perk", "value": "Unlimited airport lounge access (domestic + international)", "category": "travel"},
+            {"type": "protection", "value": "Comprehensive travel insurance", "category": "travel"},
+        ],
+        "shopping_tip": "Use SmartBuy for 10x rewards on Amazon/Flipkart gift vouchers — better than direct purchase!"
+    },
+    "amex_mrcc": {
+        "name": "American Express MRCC (Membership Rewards)",
+        "country": "IN",
+        "benefits": [
+            {"type": "points", "value": "1000 bonus MR points on ₹1,500+ Amazon spend", "category": "shopping"},
+            {"type": "points", "value": "5x MR points on select partners", "category": "shopping"},
+            {"type": "perk", "value": "18-hole complimentary golf games", "category": "lifestyle"},
+        ],
+        "shopping_tip": "Enroll in Amazon offer via Amex portal first — bonus 1000 points on ₹1,500+ spends"
+    },
+    "amex_platinum_travel": {
+        "name": "American Express Platinum Travel",
+        "country": "IN",
+        "benefits": [
+            {"type": "points", "value": "5x MR points on domestic travel", "category": "travel"},
+            {"type": "points", "value": "3x MR points on international spends", "category": "travel"},
+            {"type": "perk", "value": "4 complimentary airport lounge visits/year", "category": "travel"},
+        ],
+        "shopping_tip": "Best for international purchases (no forex markup with points offset)"
+    },
+    "kotak_811": {
+        "name": "Kotak 811 #DreamDifferent Credit Card",
+        "country": "IN",
+        "benefits": [
+            {"type": "cashback", "value": "10% on OTT (Netflix, Hotstar, Prime)", "category": "entertainment"},
+            {"type": "cashback", "value": "6% on food delivery (Swiggy, Zomato)", "category": "dining"},
+            {"type": "cashback", "value": "2% on all other spends", "category": "general"},
+        ],
+        "shopping_tip": "Entry-level card with no joining fee — good for general cashback"
+    },
+    "kotak_league_platinum": {
+        "name": "Kotak League Platinum Credit Card",
+        "country": "IN",
+        "benefits": [
+            {"type": "points", "value": "4 reward points per ₹150 (2.6% value)", "category": "general"},
+            {"type": "perk", "value": "8x reward points on weekend dining", "category": "dining"},
+            {"type": "perk", "value": "Buy 1 Get 1 on movies (BookMyShow)", "category": "entertainment"},
+        ],
+        "shopping_tip": "Great for weekend shopping + dining combo — maximize 8x weekend rewards"
+    },
+    "idfc_millennia": {
+        "name": "IDFC FIRST Millennia Credit Card",
+        "country": "IN",
+        "benefits": [
+            {"type": "points", "value": "6x rewards on online spends", "category": "shopping"},
+            {"type": "points", "value": "3x rewards on offline spends", "category": "general"},
+            {"type": "perk", "value": "4 complimentary railway lounge visits/quarter", "category": "travel"},
+        ],
+        "shopping_tip": "6x online rewards is among the best in segment — great for e-commerce purchases"
+    },
+    "idfc_select": {
+        "name": "IDFC FIRST Select Credit Card",
+        "country": "IN",
+        "benefits": [
+            {"type": "points", "value": "10x rewards on select brands (Amazon, Flipkart, BigBasket)", "category": "shopping"},
+            {"type": "points", "value": "4x rewards on all other spends", "category": "general"},
+            {"type": "perk", "value": "Airport lounge access (domestic)", "category": "travel"},
+        ],
+        "shopping_tip": "10x on Amazon/Flipkart is INSANE value — check if your purchase qualifies"
+    },
+    "onecard": {
+        "name": "OneCard Metal Credit Card",
+        "country": "IN",
+        "benefits": [
+            {"type": "cashback", "value": "5x rewards on top spend category (auto-detected)", "category": "shopping"},
+            {"type": "cashback", "value": "2x rewards on all other spends", "category": "general"},
+            {"type": "perk", "value": "No annual fee, no joining fee", "category": "general"},
+        ],
+        "shopping_tip": "OneCard auto-detects your top category — if shopping is your #1 spend, you get 5x automatically!"
+    },
+    "cred_mint": {
+        "name": "CRED Mint (via RBL Bank)",
+        "country": "IN",
+        "benefits": [
+            {"type": "cashback", "value": "5% cashback on CRED partner brands", "category": "shopping"},
+            {"type": "cashback", "value": "1% cashback on all other spends", "category": "general"},
+            {"type": "perk", "value": "CRED coins on every payment", "category": "rewards"},
+        ],
+        "shopping_tip": "Pay via CRED app for extra CRED coins — redeem for brand vouchers and cashback"
+    },
+    "sbi_cashback": {
+        "name": "SBI Cashback Credit Card",
+        "country": "IN",
+        "benefits": [
+            {"type": "cashback", "value": "5% cashback on all online spends", "category": "shopping"},
+            {"type": "cashback", "value": "1% cashback on offline spends", "category": "general"},
+        ],
+        "shopping_tip": "Flat 5% on ALL online purchases — no category restrictions. Best flat-rate online card!"
+    },
+    "bob_eterna": {
+        "name": "Bank of Baroda Eterna Credit Card",
+        "country": "IN",
+        "benefits": [
+            {"type": "points", "value": "6x rewards on weekend dining/shopping", "category": "shopping"},
+            {"type": "points", "value": "3x rewards on weekday spends", "category": "general"},
+            {"type": "perk", "value": "2 domestic lounge visits/quarter", "category": "travel"},
+        ],
+        "shopping_tip": "Shop on weekends for 6x rewards — great for planned purchases"
+    },
+    "rupay_platinum": {
+        "name": "RuPay Platinum Debit Card (various banks)",
+        "country": "IN",
+        "benefits": [
+            {"type": "cashback", "value": "UPI cashback via RuPay on Amazon, Swiggy", "category": "shopping"},
+            {"type": "perk", "value": "No transaction fees on RuPay", "category": "general"},
+            {"type": "perk", "value": "Complimentary IRCTC lounge access", "category": "travel"},
+        ],
+        "shopping_tip": "RuPay debit cards often get exclusive cashback during Amazon/Flipkart sales!"
+    },
+    "axis_neo": {
+        "name": "Axis Bank Neo Credit Card",
+        "country": "IN",
+        "benefits": [
+            {"type": "cashback", "value": "2% cashback on utility bill payments", "category": "bills"},
+            {"type": "cashback", "value": "1% cashback on all other spends", "category": "general"},
+            {"type": "perk", "value": "Buy 1 Get 1 movie tickets (Paytm)", "category": "entertainment"},
+        ],
+        "shopping_tip": "Entry-level Axis card — good for bill payments. Upgrade to Flipkart card for shopping."
+    },
+    "hdfc_swiggy": {
+        "name": "HDFC Swiggy Credit Card",
+        "country": "IN",
+        "benefits": [
+            {"type": "cashback", "value": "10% cashback on Swiggy orders", "category": "dining"},
+            {"type": "cashback", "value": "5% cashback on online shopping", "category": "shopping"},
+            {"type": "cashback", "value": "1% on all other spends", "category": "general"},
+        ],
+        "shopping_tip": "5% on all online shopping is great — plus 10% on Swiggy is unmatched"
+    },
+    "icici_coral": {
+        "name": "ICICI Bank Coral Credit Card",
+        "country": "IN",
+        "benefits": [
+            {"type": "points", "value": "2 PAYBACK points per ₹100 spent", "category": "general"},
+            {"type": "perk", "value": "Buy 1 Get 1 on BookMyShow (up to ₹250)", "category": "entertainment"},
+            {"type": "perk", "value": "1 domestic lounge access/quarter", "category": "travel"},
+        ],
+        "shopping_tip": "Good entry card — PAYBACK points redeemable at many partner stores"
+    },
+    "icici_sapphiro": {
+        "name": "ICICI Bank Sapphiro Credit Card",
+        "country": "IN",
+        "benefits": [
+            {"type": "points", "value": "2x rewards on all online spends", "category": "shopping"},
+            {"type": "perk", "value": "Golf privileges and airport lounges", "category": "travel"},
+            {"type": "protection", "value": "Extended warranty on electronics", "category": "shopping"},
+        ],
+        "shopping_tip": "Extended warranty on electronics is valuable for expensive purchases — 1 extra year free!"
+    },
 }
 
 
@@ -176,12 +348,23 @@ COUPON_API_BASE = "https://api.couponapi.org/v1"
 
 # Store domain mapping for popular brands
 STORE_DOMAINS = {
-    "amazon": "amazon.com",
+    # India
     "amazon.in": "amazon.in",
-    "nike": "nike.com",
-    "adidas": "adidas.com",
+    "amazon": "amazon.com",
     "flipkart": "flipkart.com",
     "myntra": "myntra.com",
+    "croma": "croma.com",
+    "reliance digital": "reliancedigital.in",
+    "vijay sales": "vijaysales.com",
+    "tata cliq": "tatacliq.com",
+    "jiomart": "jiomart.com",
+    "meesho": "meesho.com",
+    "snapdeal": "snapdeal.com",
+    "nykaa": "nykaa.com",
+    "ajio": "ajio.com",
+    # US/Global
+    "nike": "nike.com",
+    "adidas": "adidas.com",
     "walmart": "walmart.com",
     "target": "target.com",
     "bestbuy": "bestbuy.com",
@@ -362,6 +545,8 @@ async def _fetch_cashback_offers(store_domain: str) -> List[Dict]:
         "amazon.in": [
             {"platform": "CashKaro", "rate": "2-6%", "note": "Varies by category"},
             {"platform": "Magicpin", "rate": "3-5%", "note": "Via gift cards"},
+            {"platform": "Amazon Pay (wallet)", "rate": "2-10%", "note": "Load via UPI for extra cashback during sales"},
+            {"platform": "CRED Pay", "rate": "1-5%", "note": "Pay via CRED for coins redeemable as cashback"},
         ],
         "nike.com": [
             {"platform": "Rakuten", "rate": "6-8%", "note": "Standard rate"},
@@ -369,9 +554,23 @@ async def _fetch_cashback_offers(store_domain: str) -> List[Dict]:
         ],
         "flipkart.com": [
             {"platform": "CashKaro", "rate": "3-6%", "note": "Varies by category"},
+            {"platform": "Flipkart Pay Later", "rate": "1-3%", "note": "Interest-free EMI + extra discount"},
+            {"platform": "PhonePe (Flipkart)", "rate": "2-5%", "note": "Pay via PhonePe UPI for cashback during sales"},
+            {"platform": "CRED Pay", "rate": "1-5%", "note": "CRED coins on Flipkart payments"},
         ],
         "myntra.com": [
             {"platform": "CashKaro", "rate": "4-7%", "note": "Fashion & accessories"},
+            {"platform": "Myntra Insider Points", "rate": "2-5%", "note": "Redeem as coupons on next purchase"},
+        ],
+        "croma.com": [
+            {"platform": "CashKaro", "rate": "2-4%", "note": "Electronics & appliances"},
+            {"platform": "HDFC SmartBuy", "rate": "5-10%", "note": "Via HDFC card reward points"},
+        ],
+        "reliancedigital.in": [
+            {"platform": "JioMart/Reliance Pay", "rate": "2-5%", "note": "Jio wallet cashback"},
+        ],
+        "vijaysales.com": [
+            {"platform": "CashKaro", "rate": "1-3%", "note": "Electronics"},
         ],
     }
 
@@ -443,6 +642,44 @@ def get_card_recommendations(store_domain: str, price: float = None, country: st
 
 
 # ============================================================
+# UPI & WALLET BENEFITS (India-specific)
+# ============================================================
+
+UPI_WALLET_BENEFITS = {
+    "amazon.in": [
+        {"wallet": "Amazon Pay UPI", "benefit": "Up to 10% cashback on loading via UPI during sales", "max_cashback": "₹200", "note": "Best during Great Indian Festival / Prime Day"},
+        {"wallet": "Amazon Pay Later", "benefit": "Interest-free EMI on orders above ₹3,000", "max_cashback": None, "note": "No extra cashback but saves interest"},
+    ],
+    "flipkart.com": [
+        {"wallet": "PhonePe UPI", "benefit": "₹25-100 cashback on transactions above ₹199", "max_cashback": "₹100", "note": "Offers rotate — check PhonePe app before paying"},
+        {"wallet": "Flipkart Pay Later", "benefit": "Interest-free EMI + up to ₹100 off", "max_cashback": "₹100", "note": "Auto-applied during BBD sales"},
+        {"wallet": "Paytm UPI", "benefit": "Scratch cards worth up to ₹500 on Flipkart", "max_cashback": "₹500", "note": "Scratch card is lottery — avg value ₹5-50"},
+    ],
+    "croma.com": [
+        {"wallet": "HDFC SmartBuy", "benefit": "10x reward points on HDFC cards", "max_cashback": None, "note": "Must go through SmartBuy portal first"},
+    ],
+}
+
+
+def get_upi_wallet_benefits(store_domain: str, country: str = "IN") -> List[Dict]:
+    """Get UPI and wallet cashback benefits for a store (India-specific)."""
+    if country != "IN":
+        return []
+    
+    benefits = []
+    if store_domain in UPI_WALLET_BENEFITS:
+        for b in UPI_WALLET_BENEFITS[store_domain]:
+            benefits.append({
+                "wallet": b["wallet"],
+                "benefit": b["benefit"],
+                "max_cashback": b.get("max_cashback"),
+                "note": b.get("note", ""),
+                "type": "upi_wallet",
+            })
+    return benefits
+
+
+# ============================================================
 # MAIN FUNCTION — Drop-in replacement for find_coupons
 # ============================================================
 
@@ -471,6 +708,9 @@ async def find_coupons(product_name: str, asin: str, price: float = None, countr
         _fetch_cashback_offers(store_domain),
         return_exceptions=True,
     )
+
+    # UPI/Wallet benefits (India only, instant — no API call)
+    upi_benefits = get_upi_wallet_benefits(store_domain, country)
 
     # Handle exceptions gracefully
     if isinstance(api_coupons, Exception):
@@ -506,6 +746,7 @@ async def find_coupons(product_name: str, asin: str, price: float = None, countr
         "found": len(verified_coupons),
         "coupons": verified_coupons,
         "cashback": cashback_offers,
+        "upi_wallets": upi_benefits,
         "credit_cards": card_recs,
         "best_combo": best_combo,
         "store": store_domain,

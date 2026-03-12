@@ -504,6 +504,16 @@ def format_beautiful_output(
             note = f" — {cb['note']}" if cb.get("note") else ""
             output.append(f"    • {cb['platform']}: {cb['rate']} cashback{note}")
 
+    # UPI / Wallets (India-specific)
+    if coupons and coupons.get("upi_wallets"):
+        output.append("")
+        output.append("  📱 UPI & WALLET OFFERS:")
+        for upi in coupons["upi_wallets"]:
+            max_cb = f" (max {upi['max_cashback']})" if upi.get("max_cashback") else ""
+            output.append(f"    • {upi['wallet']}: {upi['benefit']}{max_cb}")
+            if upi.get("note"):
+                output.append(f"      💡 {upi['note']}")
+
     # Credit Cards
     if coupons and coupons.get("credit_cards"):
         output.append("")
