@@ -1,5 +1,6 @@
 # executor.py — Shopping Truth Agent executor with API-first architecture
 # Phase 1: Clean API layer, graceful degradation, structured output
+# Phase 2: Alternatives, enhanced fake reviews, price prediction with context
 
 import asyncio
 from typing import AsyncGenerator, Dict
@@ -8,9 +9,12 @@ from app.core.config import settings
 
 from .api_layer import (
     extract_asin, extract_flipkart_id, detect_platform,
-    fetch_amazon_product, fetch_all_sources
+    fetch_amazon_product, fetch_all_sources, fetch_alternatives
 )
-from .analyzers import analyze_fake_reviews, analyze_regret_pattern, calculate_confidence
+from .analyzers import (
+    analyze_fake_reviews, analyze_regret_pattern, calculate_confidence,
+    get_fake_review_summary
+)
 from .summarizer import generate_summary, format_beautiful_output
 from .coupon_sniper import find_coupons
 from .constants import LLM_TEMPERATURE, LLM_MAX_TOKENS
@@ -23,16 +27,16 @@ async def execute(
     options: dict = None
 ) -> AsyncGenerator[dict, None]:
     """
-    Shopping Truth Agent — Analyze products across 10 data sources.
+    Shopping Truth Agent — Analyze products across 10+ data sources.
     
     Flow:
     1. Parse input → extract ASIN, detect platform
     2. Fetch Amazon product first (need title/price for other searches)
-    3. Fetch ALL other sources in parallel
-    4. Run ML analysis (fake reviews, regret, confidence)
-    5. Run price prediction (if Keepa data available)
+    3. Fetch ALL other sources + alternatives in parallel
+    4. Run ML analysis (fake reviews with cross-verification, regret, confidence)
+    5. Run price prediction with context (ARIMA + sale calendar)
     6. Run coupon/savings check
-    7. Generate LLM verdict
+    7. Generate LLM verdict (with alternatives + prediction data)
     8. Format two-tier output (TL;DR + full analysis)
     """
     api_key = keys.get("OPENAI_API_KEY")
@@ -85,19 +89,42 @@ async def execute(
             "country": country,
         }
 
-    # ── Step 3: Fetch ALL other sources in parallel ──
-    yield sse_event("status", "🌐 Querying Reddit, YouTube, Keepa, Fakespot, ReviewMeta, Wirecutter, RTINGS, Trustpilot...")
-    all_results = await fetch_all_sources(asin, product_name, brand, country, keys)
+    # ── Step 3: Fetch ALL other sources + alternatives in parallel ──
+    yield sse_event("status", "🌐 Querying Reddit, YouTube, Keepa, ReviewMeta, Wirecutter, RTINGS, Trustpilot + finding alternatives...")
+
+    # Detect rough category from product name for alternative search
+    category = _detect_category(product_name)
+
+    all_results_task = fetch_all_sources(asin, product_name, brand, country, keys)
+    alternatives_task = fetch_alternatives(product_name, price_numeric, category, country, keys)
+
+    all_results, alternatives_result = await asyncio.gather(
+        all_results_task, alternatives_task, return_exceptions=True
+    )
+
+    # Handle exceptions
+    if isinstance(all_results, Exception):
+        all_results = {"sources": {}, "summary": {"total": 10, "succeeded": 0, "failed": 10, "success_rate": 0, "total_latency_ms": 0, "failed_sources": []}}
+    if isinstance(alternatives_result, Exception):
+        alternatives_result = {"success": False, "data": {}, "error": str(alternatives_result), "source": "alternatives"}
+
     source_results = all_results["sources"]
     summary = all_results["summary"]
 
     # Inject the Amazon result we already have
     source_results["amazon"] = amazon_result
 
+    # Extract alternatives data
+    alternatives_data = {}
+    if isinstance(alternatives_result, dict) and alternatives_result.get("success"):
+        alternatives_data = alternatives_result.get("data", {})
+    elif isinstance(alternatives_result, dict) and alternatives_result.get("data"):
+        alternatives_data = alternatives_result["data"]
+
     yield sse_event("status", f"✅ {summary['succeeded']}/{summary['total']} sources responded")
 
-    # ── Step 4: ML Analysis ──
-    yield sse_event("status", "🕵️ Running fake review detection & pattern analysis...")
+    # ── Step 4: ML Analysis with cross-verification ──
+    yield sse_event("status", "🕵️ Running fake review detection & cross-verification...")
 
     # Use reviews from Amazon data for fake review analysis
     reviews = amazon_data.get("reviews", [])
@@ -105,24 +132,41 @@ async def execute(
     regret_analysis = analyze_regret_pattern(reviews)
     confidence = calculate_confidence(all_results)
 
-    # ── Step 5: Price Prediction (if Keepa data available) ──
+    # Enhanced fake review summary with ReviewMeta cross-verification
+    fake_review_summary = get_fake_review_summary(reviews, fake_analysis, all_results)
+
+    # ── Step 5: Price Prediction with context ──
     price_prediction = {}
     keepa_result = source_results.get("keepa", {})
     if keepa_result.get("success"):
-        yield sse_event("status", "📈 Running ARIMA price prediction...")
+        yield sse_event("status", "📈 Running ARIMA price prediction with sale calendar...")
         try:
             from .price_predictor_arima import ARIMAPricePredictor
             predictor = ARIMAPricePredictor(order=(5, 1, 0))
             keepa_data = keepa_result["data"]
-            # Format for ARIMA predictor
-            price_data_for_arima = {
-                "success": True,
-                "prices": keepa_data.get("prices", []),
-                "data_points": keepa_data.get("data_points", 0),
-            }
-            price_prediction = predictor.predict_next_30_days(price_data_for_arima)
+
+            # Use predict_with_context for richer output
+            price_prediction = predictor.predict_with_context(
+                keepa_data=keepa_data,
+                current_price=price_numeric,
+                country=country
+            )
         except Exception as e:
             price_prediction = {"error": str(e), "confidence": 0}
+    else:
+        # No Keepa data — still provide sale calendar info
+        try:
+            from .price_predictor_arima import _get_upcoming_sales
+            upcoming_sales = _get_upcoming_sales(country)
+            if upcoming_sales:
+                price_prediction = {
+                    "upcoming_sales": upcoming_sales,
+                    "method": "sale_calendar_only",
+                    "explanation": "No price history available. Showing upcoming sales for planning.",
+                    "confidence": 0.1,
+                }
+        except Exception:
+            pass
 
     # ── Step 6: Coupon & Savings ──
     yield sse_event("status", "💰 Checking coupons, cashback & credit card benefits...")
@@ -131,7 +175,7 @@ async def execute(
     except Exception:
         coupons = {"found": 0, "coupons": [], "cashback": [], "credit_cards": []}
 
-    # ── Step 7: Generate LLM Verdict ──
+    # ── Step 7: Generate LLM Verdict (with enhanced data) ──
     yield sse_event("status", "🤖 Generating AI verdict...")
 
     ai_verdict = await generate_summary(
@@ -141,6 +185,9 @@ async def execute(
         fake_analysis=fake_analysis,
         regret_analysis=regret_analysis,
         confidence=confidence,
+        alternatives=alternatives_data,
+        price_prediction=price_prediction,
+        fake_review_summary=fake_review_summary,
     )
 
     # ── Step 8: Format Output ──
@@ -154,6 +201,37 @@ async def execute(
         coupons=coupons,
         ai_verdict=ai_verdict,
         summary=summary,
+        alternatives=alternatives_data,
+        fake_review_summary=fake_review_summary,
     )
 
     yield sse_event("result", beautiful_output)
+
+
+def _detect_category(product_name: str) -> str:
+    """Detect product category from name for better alternative search."""
+    name_lower = product_name.lower()
+
+    category_keywords = {
+        "earbuds": ["earbuds", "earbud", "tws", "wireless earphone"],
+        "headphones": ["headphone", "headset", "over-ear", "on-ear"],
+        "speaker": ["speaker", "soundbar", "bluetooth speaker", "portable speaker"],
+        "phone": ["phone", "smartphone", "mobile", "iphone", "galaxy", "pixel", "oneplus"],
+        "laptop": ["laptop", "notebook", "macbook", "chromebook", "thinkpad"],
+        "tablet": ["tablet", "ipad", "tab"],
+        "tv": ["television", " tv ", "smart tv", "oled", "qled"],
+        "monitor": ["monitor", "display"],
+        "keyboard": ["keyboard", "mechanical keyboard"],
+        "mouse": ["mouse", "mice", "trackpad"],
+        "camera": ["camera", "dslr", "mirrorless", "gopro", "action cam"],
+        "watch": ["watch", "smartwatch", "fitness tracker", "band"],
+        "charger": ["charger", "power bank", "adapter"],
+        "storage": ["ssd", "hard drive", "hdd", "pen drive", "memory card"],
+    }
+
+    for category, keywords in category_keywords.items():
+        for kw in keywords:
+            if kw in name_lower:
+                return category
+
+    return ""

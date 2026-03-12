@@ -805,6 +805,301 @@ async def fetch_trustpilot(brand: str) -> Dict:
         return _failure("trustpilot", str(e), latency)
 
 # ============================================================
+# SOURCE 11: Alternative Finder
+# ============================================================
+
+async def fetch_alternatives(product_name: str, current_price: float = None, category: str = "", country: str = "IN", keys: dict = None) -> Dict:
+    """
+    Find alternative products that may be cheaper or better rated.
+    
+    Priority:
+    1. Google Shopping via SerpAPI (if key available) — structured data
+    2. Amazon search HTTP fallback — always works
+    
+    Returns top 3-5 alternatives with title, price, rating, source, savings, why_better.
+    """
+    from .constants import MAX_ALTERNATIVES
+
+    cache_key = _cache_key("alternatives", f"{product_name}:{country}")
+    cached = _cache_get(cache_key)
+    if cached:
+        return _success("alternatives", cached, 0)
+
+    start = time.time()
+    alternatives = []
+
+    # Strategy 1: Google Shopping via SerpAPI
+    serpapi_key = (keys or {}).get("SERPAPI_KEY")
+    if serpapi_key:
+        try:
+            alternatives = await _fetch_alternatives_google(product_name, current_price, category, country, serpapi_key)
+        except Exception:
+            alternatives = []
+
+    # Strategy 2: Amazon search fallback
+    if len(alternatives) < 2:
+        try:
+            amazon_alts = await _fetch_alternatives_amazon(product_name, current_price, category, country)
+            # Merge, deduplicate by title similarity
+            seen_titles = {a["title"].lower()[:30] for a in alternatives}
+            for alt in amazon_alts:
+                if alt["title"].lower()[:30] not in seen_titles:
+                    alternatives.append(alt)
+                    seen_titles.add(alt["title"].lower()[:30])
+        except Exception:
+            pass
+
+    # Score and rank alternatives
+    alternatives = _rank_alternatives(alternatives, current_price)
+
+    # Limit to MAX_ALTERNATIVES
+    alternatives = alternatives[:MAX_ALTERNATIVES]
+
+    if not alternatives:
+        latency = (time.time() - start) * 1000
+        return _failure("alternatives", "No alternatives found", latency)
+
+    result = {
+        "found": len(alternatives),
+        "alternatives": alternatives,
+        "search_query": product_name,
+    }
+
+    latency = (time.time() - start) * 1000
+    _cache_set(cache_key, result, ttl_seconds=3600)
+    return _success("alternatives", result, latency)
+
+
+async def _fetch_alternatives_google(product_name: str, current_price: float, category: str, country: str, serpapi_key: str) -> List[Dict]:
+    """Fetch alternatives from Google Shopping via SerpAPI."""
+    # Build a search query that finds competitors, not the exact product
+    brand_word = product_name.split()[0] if product_name else ""
+    # Remove brand from search to find alternatives from OTHER brands
+    search_terms = product_name.split()
+    if len(search_terms) > 2:
+        # Use category keywords without brand: e.g. "wireless earbuds" instead of "Sony WF-1000XM5"
+        generic_query = " ".join(search_terms[1:4]) if category else " ".join(search_terms[1:])
+    else:
+        generic_query = product_name
+
+    if category:
+        generic_query = f"best {category} {generic_query}"
+
+    url = "https://serpapi.com/search.json"
+    params = {
+        "engine": "google_shopping",
+        "q": generic_query,
+        "gl": country.lower(),
+        "hl": "en",
+        "num": 10,
+        "api_key": serpapi_key,
+    }
+
+    alternatives = []
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(url, params=params)
+        if resp.status_code != 200:
+            return []
+
+        data = resp.json()
+        results = data.get("shopping_results", [])
+
+        product_name_lower = product_name.lower()
+        for item in results[:10]:
+            title = item.get("title", "")
+            # Skip the exact same product
+            if _is_same_product(title, product_name):
+                continue
+
+            price_numeric = item.get("extracted_price", 0)
+            if not price_numeric or price_numeric <= 0:
+                continue
+
+            rating = item.get("rating")
+            source = item.get("source", "Google Shopping")
+
+            savings_pct = 0.0
+            if current_price and current_price > 0 and price_numeric < current_price:
+                savings_pct = round(((current_price - price_numeric) / current_price) * 100, 1)
+
+            why_better = _determine_why_better(price_numeric, current_price, rating)
+
+            alternatives.append({
+                "title": title[:100],
+                "price": price_numeric,
+                "price_display": f"₹{price_numeric:,.0f}" if country == "IN" else f"${price_numeric:,.2f}",
+                "rating": float(rating) if rating else None,
+                "source": source,
+                "link": item.get("link", ""),
+                "savings_percentage": savings_pct,
+                "why_better": why_better,
+            })
+
+    return alternatives
+
+
+async def _fetch_alternatives_amazon(product_name: str, current_price: float, category: str, country: str) -> List[Dict]:
+    """Fetch alternatives from Amazon search as fallback."""
+    # Build generic search query
+    search_terms = product_name.split()
+    if len(search_terms) > 3:
+        query = " ".join(search_terms[1:4])  # Skip brand, take 3 keywords
+    else:
+        query = product_name
+
+    domain = "amazon.in" if country == "IN" else "amazon.com"
+    url = f"https://www.{domain}/s"
+    params = {"k": query, "ref": "nb_sb_noss"}
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+    }
+
+    alternatives = []
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            resp = await client.get(url, params=params, headers=headers)
+            if resp.status_code != 200:
+                return []
+
+            html = resp.text
+
+            # Parse search results using regex
+            # Each result card typically has data-asin attribute
+            result_blocks = re.findall(
+                r'data-asin="([A-Z0-9]{10})".*?(?=data-asin="|$)',
+                html, re.DOTALL
+            )
+
+            # Simpler approach: extract product cards
+            # Look for title + price pairs
+            titles = re.findall(
+                r'class="a-size-(?:medium|base-plus|mini)[^"]*"[^>]*>\s*<[^>]*>([^<]+)</(?:a|span)>',
+                html
+            )
+            prices = re.findall(
+                r'class="a-price-whole">([^<]+)',
+                html
+            )
+            ratings_raw = re.findall(
+                r'([\d.]+) out of 5 stars',
+                html
+            )
+
+            product_name_lower = product_name.lower()
+            for i in range(min(len(titles), len(prices), 8)):
+                title = titles[i].strip()
+                if not title or len(title) < 10:
+                    continue
+                # Skip the exact same product
+                if _is_same_product(title, product_name):
+                    continue
+
+                try:
+                    price_str = prices[i].strip().replace(',', '').replace('.', '')
+                    price_numeric = float(price_str)
+                except (ValueError, IndexError):
+                    continue
+
+                if price_numeric <= 0:
+                    continue
+
+                rating = None
+                if i < len(ratings_raw):
+                    try:
+                        rating = float(ratings_raw[i])
+                    except ValueError:
+                        pass
+
+                savings_pct = 0.0
+                if current_price and current_price > 0 and price_numeric < current_price:
+                    savings_pct = round(((current_price - price_numeric) / current_price) * 100, 1)
+
+                why_better = _determine_why_better(price_numeric, current_price, rating)
+
+                alternatives.append({
+                    "title": title[:100],
+                    "price": price_numeric,
+                    "price_display": f"₹{price_numeric:,.0f}" if country == "IN" else f"${price_numeric:,.2f}",
+                    "rating": rating,
+                    "source": f"Amazon {'India' if country == 'IN' else 'US'}",
+                    "link": f"https://www.{domain}/s?k={query.replace(' ', '+')}",
+                    "savings_percentage": savings_pct,
+                    "why_better": why_better,
+                })
+
+    except Exception:
+        pass
+
+    return alternatives
+
+
+def _is_same_product(title_a: str, title_b: str) -> bool:
+    """Check if two product titles refer to the same product."""
+    a_words = set(title_a.lower().split()[:5])
+    b_words = set(title_b.lower().split()[:5])
+    if not a_words or not b_words:
+        return False
+    overlap = len(a_words & b_words) / max(len(a_words), len(b_words))
+    return overlap > 0.7
+
+
+def _determine_why_better(alt_price: float, current_price: float, alt_rating: float = None) -> str:
+    """Determine why an alternative might be better."""
+    reasons = []
+
+    if current_price and alt_price:
+        if alt_price < current_price * 0.85:
+            reasons.append("Significantly cheaper")
+        elif alt_price < current_price * 0.95:
+            reasons.append("Cheaper")
+
+    if alt_rating:
+        if alt_rating >= 4.5:
+            reasons.append("Highly rated (4.5+★)")
+        elif alt_rating >= 4.2:
+            reasons.append("Well rated (4.2+★)")
+
+    if not reasons:
+        if current_price and alt_price and alt_price <= current_price:
+            reasons.append("Competitive price")
+        else:
+            reasons.append("Popular alternative")
+
+    return " • ".join(reasons)
+
+
+def _rank_alternatives(alternatives: List[Dict], current_price: float = None) -> List[Dict]:
+    """Rank alternatives by a composite score: savings + rating."""
+    for alt in alternatives:
+        score = 0.0
+        # Savings weight (40%)
+        if alt.get("savings_percentage", 0) > 0:
+            score += min(alt["savings_percentage"] / 50.0, 1.0) * 40
+        # Rating weight (35%)
+        if alt.get("rating"):
+            score += (alt["rating"] / 5.0) * 35
+        # Price penalty if MORE expensive (25%)
+        if current_price and alt.get("price"):
+            if alt["price"] <= current_price:
+                score += 25
+            else:
+                score += max(0, 25 - ((alt["price"] - current_price) / current_price) * 50)
+        alt["_score"] = score
+
+    alternatives.sort(key=lambda x: x.get("_score", 0), reverse=True)
+
+    # Remove internal score from output
+    for alt in alternatives:
+        alt.pop("_score", None)
+
+    return alternatives
+
+
+# ============================================================
 # MASTER FETCH — Run all sources in parallel
 # ============================================================
 

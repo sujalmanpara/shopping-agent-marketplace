@@ -130,6 +130,289 @@ def analyze_fake_reviews(reviews: List[Dict]) -> Dict:
     }
 
 
+def get_fake_review_summary(reviews: List[Dict], fake_analysis: Dict, source_results: Dict = None) -> Dict:
+    """
+    Generate a rich, actionable fake review summary.
+    
+    Combines XGBoost ML analysis with ReviewMeta cross-verification
+    to produce adjusted ratings, detected patterns, and trustworthy reviews.
+    
+    Args:
+        reviews: Raw review list from Amazon
+        fake_analysis: Output from analyze_fake_reviews()
+        source_results: Full source results dict (for ReviewMeta cross-reference)
+    
+    Returns:
+        {
+            "adjusted_rating": float,
+            "original_rating": float,
+            "common_patterns": list of detected pattern strings,
+            "trustworthy_reviews": list of best quality reviews,
+            "cross_verification": dict with XGBoost vs ReviewMeta comparison,
+            "confidence_in_detection": "HIGH" | "MEDIUM" | "LOW",
+            "summary_text": human-readable summary string,
+        }
+    """
+    result = {
+        "adjusted_rating": None,
+        "original_rating": None,
+        "common_patterns": [],
+        "trustworthy_reviews": [],
+        "cross_verification": {},
+        "confidence_in_detection": "LOW",
+        "summary_text": "",
+    }
+
+    if not reviews:
+        result["summary_text"] = "No reviews available for analysis"
+        return result
+
+    # ── Calculate original and adjusted ratings ──
+    ratings = [r.get("rating", 0) for r in reviews if r.get("rating")]
+    if ratings:
+        original_avg = sum(ratings) / len(ratings)
+        result["original_rating"] = round(original_avg, 2)
+
+        # Calculate adjusted rating by removing suspicious reviews
+        suspicious_pct = fake_analysis.get("score", 0) / 100.0
+        flagged_texts = {f.get("text", "")[:50] for f in fake_analysis.get("flagged_reviews", [])}
+
+        # Remove reviews that match flagged patterns
+        clean_ratings = []
+        for r in reviews:
+            body = r.get("body", r.get("text", ""))
+            snippet = (body[:100] + "..." if len(body) > 100 else body) if body else ""
+            # Check if this review was flagged
+            is_flagged = False
+            for ft in flagged_texts:
+                if ft and snippet and ft[:40] in snippet[:40]:
+                    is_flagged = True
+                    break
+            if not is_flagged:
+                if r.get("rating"):
+                    clean_ratings.append(r["rating"])
+
+        if clean_ratings:
+            result["adjusted_rating"] = round(sum(clean_ratings) / len(clean_ratings), 2)
+        else:
+            # If we removed too many, use a conservative estimate
+            result["adjusted_rating"] = round(original_avg * (1 - suspicious_pct * 0.3), 2)
+    else:
+        result["adjusted_rating"] = None
+        result["original_rating"] = None
+
+    # ── Detect common patterns ──
+    patterns = _detect_review_patterns(reviews, fake_analysis)
+    result["common_patterns"] = patterns
+
+    # ── Find trustworthy reviews ──
+    result["trustworthy_reviews"] = _find_trustworthy_reviews(reviews, fake_analysis)
+
+    # ── Cross-verification with ReviewMeta ──
+    reviewmeta_data = None
+    if source_results:
+        sources = source_results.get("sources", source_results)
+        rm_result = sources.get("reviewmeta", {})
+        if rm_result.get("success"):
+            reviewmeta_data = rm_result.get("data", {})
+
+    xgboost_flags_issues = fake_analysis.get("risk") in ("high", "medium")
+    xgboost_suspicious_pct = fake_analysis.get("score", 0)
+
+    if reviewmeta_data:
+        rm_adjusted = reviewmeta_data.get("adjusted_rating")
+        rm_original = reviewmeta_data.get("original_rating")
+        rm_failed_pct = reviewmeta_data.get("failed_reviews_pct")
+
+        rm_flags_issues = False
+        if rm_failed_pct is not None and rm_failed_pct > 20:
+            rm_flags_issues = True
+        elif rm_adjusted is not None and rm_original is not None and (rm_original - rm_adjusted) > 0.3:
+            rm_flags_issues = True
+
+        # Cross-reference
+        if xgboost_flags_issues and rm_flags_issues:
+            agreement = "AGREE_ISSUES"
+            confidence = "HIGH"
+            note = "Both XGBoost ML and ReviewMeta flagged significant issues — high confidence in fake detection"
+        elif not xgboost_flags_issues and not rm_flags_issues:
+            agreement = "AGREE_CLEAN"
+            confidence = "HIGH"
+            note = "Both XGBoost ML and ReviewMeta agree reviews look genuine"
+        else:
+            agreement = "DISAGREE"
+            confidence = "MEDIUM"
+            if xgboost_flags_issues:
+                note = f"XGBoost ML flags {xgboost_suspicious_pct}% suspicious, but ReviewMeta shows less concern — results may vary"
+            else:
+                note = f"ReviewMeta flags issues ({rm_failed_pct}% failed) but XGBoost ML found fewer problems — check manually"
+
+        result["cross_verification"] = {
+            "reviewmeta_adjusted_rating": rm_adjusted,
+            "reviewmeta_original_rating": rm_original,
+            "reviewmeta_failed_pct": rm_failed_pct,
+            "xgboost_suspicious_pct": xgboost_suspicious_pct,
+            "agreement": agreement,
+            "confidence": confidence,
+            "note": note,
+        }
+        result["confidence_in_detection"] = confidence
+
+        # Use ReviewMeta adjusted rating if available and our ML agrees
+        if rm_adjusted is not None and agreement == "AGREE_ISSUES":
+            result["adjusted_rating"] = rm_adjusted
+    else:
+        # No ReviewMeta — confidence based on ML alone
+        if fake_analysis.get("method") == "ml":
+            result["confidence_in_detection"] = "MEDIUM"
+            result["cross_verification"] = {
+                "note": "ReviewMeta data unavailable — using XGBoost ML analysis only",
+                "xgboost_suspicious_pct": xgboost_suspicious_pct,
+            }
+        else:
+            result["confidence_in_detection"] = "LOW"
+            result["cross_verification"] = {
+                "note": "Using keyword-based detection only (ML model not loaded, ReviewMeta unavailable)",
+                "xgboost_suspicious_pct": xgboost_suspicious_pct,
+            }
+
+    # ── Build summary text ──
+    parts = []
+    if result["adjusted_rating"] is not None and result["original_rating"] is not None:
+        diff = result["original_rating"] - result["adjusted_rating"]
+        if diff > 0.2:
+            parts.append(f"Adjusted rating: {result['adjusted_rating']}★ (was {result['original_rating']}★, -{diff:.1f} after removing suspicious)")
+        else:
+            parts.append(f"Rating holds at {result['adjusted_rating']}★ after filtering")
+
+    if patterns:
+        parts.append(f"Detected patterns: {', '.join(patterns[:3])}")
+
+    cv = result.get("cross_verification", {})
+    if cv.get("agreement") == "AGREE_ISSUES":
+        parts.append("⚠️ Both AI and ReviewMeta confirm fake review concerns")
+    elif cv.get("agreement") == "AGREE_CLEAN":
+        parts.append("✅ Both AI and ReviewMeta agree reviews look genuine")
+
+    result["summary_text"] = " | ".join(parts) if parts else "Insufficient data for detailed analysis"
+
+    return result
+
+
+def _detect_review_patterns(reviews: List[Dict], fake_analysis: Dict) -> List[str]:
+    """Detect common suspicious patterns in reviews."""
+    patterns = []
+
+    if not reviews:
+        return patterns
+
+    bodies = []
+    ratings = []
+    dates = []
+    for r in reviews:
+        body = r.get("body", r.get("text", ""))
+        if body:
+            bodies.append(body)
+        if r.get("rating"):
+            ratings.append(r["rating"])
+        if r.get("date"):
+            dates.append(r["date"])
+
+    # Pattern 1: Short generic praise
+    short_generic = sum(1 for b in bodies if len(b.split()) < 15 and any(
+        w in b.lower() for w in ["amazing", "best", "great", "excellent", "love it", "perfect", "awesome"]
+    ))
+    if short_generic > len(bodies) * 0.3 and short_generic >= 3:
+        patterns.append(f"Short generic praise ({short_generic} reviews)")
+
+    # Pattern 2: Rating clustering (too many 5-stars)
+    if ratings:
+        five_star_pct = sum(1 for r in ratings if r >= 4.8) / len(ratings) * 100
+        if five_star_pct > 70 and len(ratings) > 10:
+            patterns.append(f"Unusually high 5-star concentration ({five_star_pct:.0f}%)")
+
+    # Pattern 3: Review date clustering (many reviews same day)
+    if dates:
+        date_counts = {}
+        for d in dates:
+            day = str(d)[:10]  # Take just YYYY-MM-DD
+            date_counts[day] = date_counts.get(day, 0) + 1
+        max_same_day = max(date_counts.values()) if date_counts else 0
+        if max_same_day > 5 and max_same_day > len(dates) * 0.15:
+            patterns.append(f"Review burst ({max_same_day} reviews on same day)")
+
+    # Pattern 4: Duplicate/similar content
+    if len(bodies) >= 5:
+        lower_bodies = [b.lower()[:50] for b in bodies]
+        unique_starts = len(set(lower_bodies))
+        if unique_starts < len(lower_bodies) * 0.7:
+            patterns.append("Similar/repetitive review content")
+
+    # Pattern 5: No verified purchase indicators
+    verified_count = sum(1 for r in reviews if r.get("verified_purchase", False))
+    if len(reviews) > 10 and verified_count < len(reviews) * 0.3:
+        patterns.append(f"Low verified purchase rate ({verified_count}/{len(reviews)})")
+
+    # Pattern 6: Extreme length disparity
+    if bodies:
+        lengths = [len(b) for b in bodies]
+        avg_len = sum(lengths) / len(lengths)
+        very_short = sum(1 for l in lengths if l < 30)
+        if very_short > len(bodies) * 0.4 and avg_len < 50:
+            patterns.append("Many extremely short reviews")
+
+    return patterns
+
+
+def _find_trustworthy_reviews(reviews: List[Dict], fake_analysis: Dict) -> List[Dict]:
+    """Find the most trustworthy reviews — longest, most detailed, verified."""
+    flagged_texts = {f.get("text", "")[:40] for f in fake_analysis.get("flagged_reviews", [])}
+
+    scored_reviews = []
+    for r in reviews:
+        body = r.get("body", r.get("text", ""))
+        if not body or len(body) < 30:
+            continue
+
+        # Skip flagged reviews
+        snippet = body[:40]
+        if any(ft and ft in snippet for ft in flagged_texts):
+            continue
+
+        score = 0.0
+        # Length bonus (longer = more effort = more trustworthy)
+        score += min(len(body) / 500.0, 1.0) * 30
+
+        # Verified purchase bonus
+        if r.get("verified_purchase", False):
+            score += 25
+
+        # Moderate rating bonus (not extreme 1 or 5)
+        rating = r.get("rating", 0)
+        if 2.5 <= rating <= 4.5:
+            score += 20
+        elif rating > 0:
+            score += 5
+
+        # Specificity bonus (mentions specific features/issues)
+        specificity_words = ["battery", "sound", "quality", "build", "screen", "camera",
+                             "after", "months", "weeks", "days", "issue", "problem",
+                             "compared", "upgrade", "previous", "switched"]
+        specifics = sum(1 for w in specificity_words if w in body.lower())
+        score += min(specifics * 5, 25)
+
+        scored_reviews.append({
+            "text": body[:300] + ("..." if len(body) > 300 else ""),
+            "rating": rating,
+            "verified_purchase": r.get("verified_purchase", False),
+            "quality_score": round(score, 1),
+        })
+
+    # Sort by quality score and return top 3
+    scored_reviews.sort(key=lambda x: x["quality_score"], reverse=True)
+    return scored_reviews[:3]
+
+
 def analyze_regret_pattern(reviews: List[Dict]) -> Dict:
     """Detect if ratings drop over time (regret indicator)."""
     if not reviews:
