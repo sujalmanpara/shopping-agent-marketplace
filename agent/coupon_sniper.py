@@ -271,50 +271,77 @@ async def _fetch_couponapi(store_domain: str, api_key: str = None) -> List[Dict]
 
 
 async def _fetch_amazon_coupons(asin: str) -> List[Dict]:
-    """Check for Amazon-native coupons (clip coupons, Subscribe & Save)."""
+    """
+    Check for Amazon-native coupons (clip coupons, Subscribe & Save).
+    
+    Note: Amazon coupons are best detected via PA-API product data
+    (when available). This HTTP fallback uses lightweight regex parsing
+    without browser automation dependencies.
+    """
     coupons = []
     try:
-        from bs4 import BeautifulSoup
-        from scrapling import StealthyFetcher
-
         url = f"https://www.amazon.in/dp/{asin}"
-        response = await asyncio.to_thread(
-            StealthyFetcher.fetch, url,
-            headless=True, network_idle=True, timeout=15
-        )
-        soup = BeautifulSoup(response.text, "html.parser")
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
 
-        # Clip coupon
-        coupon_elem = soup.select_one(
-            ".promoPriceBlockMessage, .couponBadge, "
-            "#couponBadgeRegularVpc, .a-color-success"
-        )
-        if coupon_elem:
-            text = coupon_elem.get_text(strip=True)
-            if "coupon" in text.lower() or "%" in text or "₹" in text or "$" in text:
-                coupons.append({
-                    "code": "CLIP_COUPON",
-                    "discount": text,
-                    "description": "Amazon clip coupon — apply on product page",
-                    "source": "merchant",
-                    "verified": True,
-                    "type": "clip",
-                    "expires": None,
-                })
+        import re
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code != 200:
+                return coupons
 
-        # Subscribe & Save
-        sns_elem = soup.select_one("#snsDetailPageFeature, .sns-base-price, #sns-tiered-discount")
-        if sns_elem:
-            sns_text = sns_elem.get_text(strip=True)
-            coupons.append({
-                "code": "SUBSCRIBE_SAVE",
-                "discount": sns_text if sns_text else "5-15% off with Subscribe & Save",
-                "description": "Amazon Subscribe & Save discount — auto-delivery",
-                "source": "merchant",
-                "verified": True,
-                "type": "subscription",
-                "expires": None,
-            })
+            html = resp.text
+
+            # Detect clip coupon via common patterns in Amazon HTML
+            coupon_patterns = [
+                r'couponText["\s>]*([^<]*\d+%[^<]*)',
+                r'promoPriceBlockMessage["\s>]*([^<]*(?:coupon|₹|%)[^<]*)',
+                r'couponBadge["\s>]*([^<]*\d+[^<]*)',
+                r'Apply\s*(\d+%?\s*coupon)',
+                r'Save\s*(₹[\d,]+)\s*with\s*coupon',
+                r'Save\s*(\d+%)\s*with\s*coupon',
+            ]
+
+            for pattern in coupon_patterns:
+                match = re.search(pattern, html, re.IGNORECASE)
+                if match:
+                    text = match.group(1).strip()
+                    if text and ("coupon" in text.lower() or "%" in text or "₹" in text or "$" in text):
+                        coupons.append({
+                            "code": "CLIP_COUPON",
+                            "discount": text,
+                            "description": "Amazon clip coupon — apply on product page",
+                            "source": "merchant",
+                            "verified": True,
+                            "type": "clip",
+                            "expires": None,
+                        })
+                        break  # Only one clip coupon per product
+
+            # Detect Subscribe & Save
+            sns_patterns = [
+                r'Save\s*(?:up\s*to\s*)?(\d+%)\s*(?:more\s*)?(?:with|when)?\s*Subscribe',
+                r'Subscribe\s*&?\s*Save[^<]*?(\d+%[^<]*)',
+                r'snsDetailPageFeature["\s>]*([^<]*\d+%[^<]*)',
+            ]
+
+            for pattern in sns_patterns:
+                match = re.search(pattern, html, re.IGNORECASE)
+                if match:
+                    sns_text = match.group(1).strip()
+                    coupons.append({
+                        "code": "SUBSCRIBE_SAVE",
+                        "discount": sns_text if sns_text else "5-15% off with Subscribe & Save",
+                        "description": "Amazon Subscribe & Save discount — auto-delivery",
+                        "source": "merchant",
+                        "verified": True,
+                        "type": "subscription",
+                        "expires": None,
+                    })
+                    break
 
     except Exception:
         pass

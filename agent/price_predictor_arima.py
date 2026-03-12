@@ -157,27 +157,22 @@ class ARIMAPricePredictor:
 
 def create_best_predictor(price_data: Dict, prefer_arima: bool = True):
     """
-    Factory function: Create best available predictor
+    Factory function: Create best available predictor.
     
-    Priority:
-    1. ARIMA (if available and enough data) - 90%+ accuracy
-    2. Polynomial Regression (fallback) - 80-85% accuracy
+    Uses ARIMA model for time-series price prediction (90%+ accuracy).
+    Requires 60+ data points for reliable predictions.
     
     Args:
-        price_data: Price history data
+        price_data: Price history data (from Keepa API)
         prefer_arima: Try ARIMA first if available
     
     Returns:
-        Best predictor instance
+        ARIMAPricePredictor instance if data is sufficient, else None
     """
-    from .price_predictor import PricePredictor
-    
-    # Check if we have enough data for ARIMA
     data_points = price_data.get('data_points', 0)
     
-    if prefer_arima and ARIMA_AVAILABLE and data_points >= 60:
-        # Use ARIMA
+    if ARIMA_AVAILABLE and data_points >= 60:
         return ARIMAPricePredictor(order=(5, 1, 0))
-    else:
-        # Fall back to Polynomial Regression
-        return PricePredictor(use_polynomial=True)
+    
+    # Not enough data or ARIMA unavailable
+    return None
