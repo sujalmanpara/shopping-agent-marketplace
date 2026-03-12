@@ -48,3 +48,6 @@ Thumbs.db
 # Logs
 *.log
 cache.db
+agent/cache.db
+__pycache__/
+*.pyc

@@ -2,7 +2,7 @@
 """
 API Layer — All data sources for the Shopping Truth Agent.
 Every function returns a standardized Result dict.
-No browser scraping. No Selenium. No Camoufox. Just clean API calls.
+No browser scraping. Just clean API calls.
 """
 
 import asyncio
@@ -271,7 +271,7 @@ async def fetch_reddit_discussions(product_name: str, brand: str = "", category:
         url = f"https://old.reddit.com/search.json?q={query}&sort=relevance&limit=25"
         
         headers = {
-            "User-Agent": "ShoppingTruthAgent/1.0 (research bot)",
+            "User-Agent": "ShoppingTruthAgent/1.0 (by /u/shopping_truth_agent; contact: dev@shoppingtruth.app)",
         }
         
         async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
@@ -589,48 +589,11 @@ async def fetch_google_shopping(product_name: str, country: str = "IN", keys: di
 
 async def fetch_fakespot_grade(asin: str, country: str = "IN") -> Dict:
     """
-    Fetch Fakespot review analysis grade.
-    Uses their analysis URL endpoint.
-    Note: Fakespot was acquired by Mozilla. API availability may change.
+    Fakespot was acquired by Mozilla in 2023. Their third-party API is defunct.
+    We rely on our own XGBoost model (90.2% accuracy) for fake review detection.
+    This function returns a graceful failure — it will be removed in a future cleanup.
     """
-    cache_key = _cache_key("fakespot", asin)
-    cached = _cache_get(cache_key)
-    if cached:
-        return _success("fakespot", cached, 0)
-    
-    start = time.time()
-    
-    try:
-        domain = "amazon.in" if country == "IN" else "amazon.com"
-        product_url = f"https://www.{domain}/dp/{asin}"
-        
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/json, text/html",
-        }
-        
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            # Try API endpoint first
-            api_url = f"https://api.fakespot.com/v1/products/analyze?url={product_url}"
-            resp = await client.get(api_url, headers=headers)
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                result = {
-                    "grade": data.get("grade", "Unknown"),
-                    "adjusted_rating": data.get("adjusted_rating"),
-                    "analysis_url": data.get("analysis_url", ""),
-                }
-                latency = (time.time() - start) * 1000
-                _cache_set(cache_key, result, ttl_seconds=86400)  # 24 hour cache
-                return _success("fakespot", result, latency)
-        
-        latency = (time.time() - start) * 1000
-        return _failure("fakespot", "Fakespot API unavailable", latency)
-        
-    except Exception as e:
-        latency = (time.time() - start) * 1000
-        return _failure("fakespot", str(e), latency)
+    return _failure("fakespot", "Fakespot API discontinued (acquired by Mozilla). Using local ML model instead.", 0)
 
 # ============================================================
 # SOURCE 7: ReviewMeta
@@ -654,7 +617,7 @@ async def fetch_reviewmeta(asin: str) -> Dict:
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         }
         
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=5, follow_redirects=True) as client:
             resp = await client.get(url, headers=headers)
             
             if resp.status_code == 200:
@@ -682,7 +645,7 @@ async def fetch_reviewmeta(asin: str) -> Dict:
         
     except Exception as e:
         latency = (time.time() - start) * 1000
-        return _failure("reviewmeta", str(e), latency)
+        return _failure("reviewmeta", str(e) or "Request timeout", latency)
 
 # ============================================================
 # SOURCE 8: Wirecutter (HTTP)
