@@ -356,449 +356,420 @@ def format_beautiful_output(
     buy_timing: Dict = None,
     price_alerts: Dict = None,
 ) -> str:
-    """
-    Format all data into a beautiful, readable two-tier output.
-    
-    Phase 2 improvements:
-    - Tier 1: Tighter TL;DR (3-4 lines max)
-    - Tier 2: Full analysis with alternatives, sales, quick actions
-    - New sections: 🔄 ALTERNATIVES, 📅 UPCOMING SALES, 💡 QUICK ACTIONS
-    """
+    """Premium formatted output — designed to look worth $50."""
     output = []
 
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # TIER 1: TL;DR (3-4 lines MAX)
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    output.append("━" * 50)
-    output.append("🛒 SHOPPING TRUTH AGENT")
-    output.append("━" * 50)
-
-    # Quick product info
+    # ── Extract common data ──
     title = amazon_data.get("title", "Unknown Product")
     price_display = amazon_data.get("price_display", amazon_data.get("price", "N/A"))
     rating = amazon_data.get("rating")
     review_count = amazon_data.get("review_count", 0)
     price_numeric = amazon_data.get("price")
+    brand = amazon_data.get("brand", "")
 
-    output.append(f"\n📦 {title}")
-    output.append(f"💰 {price_display} | ⭐ {rating or 'N/A'}/5 ({review_count:,} reviews)")
-
-    # Quick verdict
-    verdict_keyword = "WAIT"
-    if ai_verdict:
-        upper = ai_verdict.upper()
-        # Check for WAIT first (most common recommendation)
-        if "WAIT" in upper:
-            verdict_keyword = "WAIT"
-            verdict_emoji = "⏳"
-        elif "AVOID" in upper and "WAIT" not in upper:
-            verdict_keyword = "AVOID"
-            verdict_emoji = "❌"
-        elif "BUY" in upper and "DON'T BUY" not in upper and "WAIT" not in upper and "AVOID" not in upper:
-            verdict_keyword = "BUY"
-            verdict_emoji = "✅"
-        else:
-            verdict_emoji = "⏳"
-    else:
-        verdict_emoji = "⏳"
-
-    output.append(f"\n{verdict_emoji} **VERDICT: {verdict_keyword}**")
-
-    # TL;DR line 2: biggest saving opportunity
-    tldr_saving = _get_biggest_saving(price_prediction, coupons, alternatives, price_numeric)
-    if tldr_saving:
-        output.append(f"💡 {tldr_saving}")
-
-    # TL;DR line 3: quick stats
     conf_level = confidence.get("level", "LOW")
-    conf_emoji = "🟢" if conf_level == "HIGH" else "🟡" if conf_level == "MEDIUM" else "🔴"
+    conf_pct = confidence.get("overall", 0)
     risk = fake_analysis.get("risk", "unknown")
-    risk_emoji = "🔴" if risk == "high" else "🟡" if risk in ("medium", "limited") else "🟢" if risk == "low" else "⚪"
     sources_used = summary.get("succeeded", 0)
     sources_total = summary.get("total", 10)
 
-    # TL;DR line 4: price benchmark (if available)
-    if price_benchmark and price_benchmark.get("verdict") not in ("unknown", "insufficient_data", None):
-        output.append(f"{price_benchmark.get('emoji', '🟡')} Price: {price_benchmark.get('message', '')}")
+    # ── Verdict detection ──
+    verdict_keyword = "WAIT"
+    if ai_verdict:
+        upper = ai_verdict.upper()
+        if "AVOID" in upper and "WAIT" not in upper:
+            verdict_keyword = "AVOID"
+        elif "BUY" in upper and "DON'T BUY" not in upper and "WAIT" not in upper and "AVOID" not in upper:
+            verdict_keyword = "BUY"
 
-    output.append(f"{conf_emoji} Confidence: {conf_level} | {risk_emoji} Fake Risk: {risk.upper()} | 📊 {sources_used}/{sources_total} sources")
+    verdict_config = {
+        "BUY": ("✅", "GO FOR IT", "🟢"),
+        "WAIT": ("⏳", "HOLD OFF", "🟡"),
+        "AVOID": ("🚫", "SKIP THIS", "🔴"),
+    }
+    v_emoji, v_label, v_color = verdict_config.get(verdict_keyword, ("⏳", "HOLD OFF", "🟡"))
 
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # TIER 2: FULL ANALYSIS
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # ════════════════════════════════════════════════════════════
+    # HERO CARD — The first thing they see
+    # ════════════════════════════════════════════════════════════
+    output.append("╔══════════════════════════════════════════════════╗")
+    output.append("║          🛒  SHOPPING TRUTH AGENT  v2.0         ║")
+    output.append("╚══════════════════════════════════════════════════╝")
+    output.append("")
 
-    # ── Source Results ──
-    output.append("\n" + "─" * 50)
-    output.append("📊 DATA SOURCES")
-    output.append("─" * 50)
+    # Product name (truncate long titles intelligently)
+    if len(title) > 70:
+        short_title = title[:67] + "..."
+    else:
+        short_title = title
+    output.append(f"  📦 {short_title}")
+    if brand:
+        output.append(f"  🏷️  {brand}")
+    output.append("")
 
-    for name, result in source_results.items():
-        if result.get("success"):
-            data = result.get("data", {})
-            latency = result.get("latency_ms", 0)
+    # ── Price + Rating bar ──
+    stars = ""
+    if rating:
+        full = int(rating)
+        half = 1 if rating - full >= 0.5 else 0
+        empty = 5 - full - half
+        stars = "★" * full + ("½" if half else "") + "☆" * empty + f" {rating}/5"
+    else:
+        stars = "☆☆☆☆☆ N/A"
 
-            if name == "amazon":
-                output.append(f"✅ Amazon: {review_count:,} reviews, {rating or 'N/A'}★ [{latency:.0f}ms]")
-            elif name == "reddit":
-                found = data.get("found", 0)
-                engagement = data.get("total_engagement", 0)
-                output.append(f"✅ Reddit: {found} posts, {engagement} engagement [{latency:.0f}ms]")
-            elif name == "youtube":
-                found = data.get("found", 0)
-                views = data.get("total_views", 0)
-                output.append(f"✅ YouTube: {found} videos, {views:,} total views [{latency:.0f}ms]")
-            elif name == "keepa":
-                avg = data.get("average_price")
-                low = data.get("lowest_price")
-                output.append(f"✅ Keepa: Avg ₹{avg:,.0f}, Low ₹{low:,.0f} [{latency:.0f}ms]" if avg and low else f"✅ Keepa: Data available [{latency:.0f}ms]")
-            elif name == "google_shopping":
-                found = data.get("found", 0)
-                output.append(f"✅ Google Shopping: {found} price comparisons [{latency:.0f}ms]")
-            elif name == "fakespot":
-                grade = data.get("grade", "N/A")
-                output.append(f"✅ Fakespot: Grade {grade} [{latency:.0f}ms]")
-            elif name == "reviewmeta":
-                adj = data.get("adjusted_rating")
-                failed = data.get("failed_reviews_pct")
-                output.append(f"✅ ReviewMeta: Adjusted {adj}/5" + (f", {failed}% failed" if failed else "") + f" [{latency:.0f}ms]")
-            elif name == "wirecutter":
-                is_pick = data.get("is_top_pick", False)
-                output.append(f"✅ Wirecutter: {'🏆 Top Pick!' if is_pick else 'Found' if data.get('found') else 'Not listed'} [{latency:.0f}ms]")
-            elif name == "rtings":
-                score = data.get("score")
-                output.append(f"✅ RTINGS: {score}/10" if score else f"✅ RTINGS: {'Listed' if data.get('found') else 'Not tested'}" + f" [{latency:.0f}ms]")
-            elif name == "trustpilot":
-                ts = data.get("trust_score")
-                output.append(f"✅ Trustpilot: {ts}/5 TrustScore [{latency:.0f}ms]" if ts else f"✅ Trustpilot: Data available [{latency:.0f}ms]")
+    price_str = f"₹{price_numeric:,.0f}" if price_numeric else str(price_display)
+    output.append(f"  💰 {price_str}     {stars}     📝 {review_count:,} reviews")
+    output.append("")
+
+    # ── THE VERDICT — big and bold ──
+    output.append("  ┌────────────────────────────────┐")
+    output.append(f"  │  {v_emoji}  VERDICT:  {v_label:^16s}  {v_emoji}  │")
+    output.append("  └────────────────────────────────┘")
+    output.append("")
+
+    # ── Score Dashboard (one-line summary) ──
+    conf_bar = _make_bar(conf_pct, 10)
+    fake_label = {"high": "🔴 HIGH", "medium": "🟡 MED", "low": "🟢 LOW", "limited": "🟡 LTD", "unknown": "⚪ N/A"}.get(risk, "⚪ N/A")
+    output.append(f"  Trust  {conf_bar}  {conf_pct:.0%}    Fake Risk: {fake_label}    Sources: {sources_used}/{sources_total}")
+    output.append("")
+
+    # ════════════════════════════════════════════════════════════
+    # 💰 MONEY SECTION — What they care about most
+    # ════════════════════════════════════════════════════════════
+
+    # ── Price Benchmark (visual) ──
+    if price_benchmark and price_benchmark.get("verdict") not in ("unknown", "insufficient_data", None) and price_numeric:
+        pb = price_benchmark
+        output.append("  ╭─── 💲 PRICE CHECK ───────────────────────────╮")
+        output.append(f"  │  {pb.get('emoji', '🟡')} {pb.get('message', '')}")
+        cat_min = pb.get("category_min", 0)
+        cat_max = pb.get("category_max", 0)
+        cat_avg = pb.get("category_avg", 0)
+        if cat_min and cat_max and cat_max > cat_min:
+            # Visual price position bar
+            price_range = cat_max - cat_min
+            pos = max(0, min(1, (price_numeric - cat_min) / price_range))
+            bar_len = 30
+            marker_pos = int(pos * bar_len)
+            bar = "░" * marker_pos + "▼" + "░" * (bar_len - marker_pos - 1)
+            output.append(f"  │  ₹{cat_min:,.0f} [{bar}] ₹{cat_max:,.0f}")
+            output.append(f"  │  Category avg: ₹{cat_avg:,.0f} • You: ₹{price_numeric:,.0f} ({pb.get('diff_from_avg_pct', 0):+.0f}%)")
+        output.append(f"  │  Compared across {pb.get('comparable_products', 0)} similar products")
+        output.append("  ╰───────────────────────────────────────────────╯")
+        output.append("")
+
+    # ── Best Deal Card ──
+    best_card = None
+    best_combo = coupons.get("best_combo") if coupons else None
+    if best_combo and price_numeric:
+        output.append("  ╭─── 🏆 YOUR BEST DEAL ──────────────────────────╮")
+        output.append(f"  │  {best_combo['strategy']}")
+        output.append(f"  │")
+        output.append(f"  │  Original:  ₹{best_combo['original_price']:,.0f}")
+        output.append(f"  │  You pay:   ₹{best_combo['final_price']:,.0f}  💚 SAVE ₹{best_combo['total_savings']:,.0f} ({best_combo['savings_percentage']}% off!)")
+        output.append("  ╰───────────────────────────────────────────────╯")
+        output.append("")
+
+    # ── Buy Timing ──
+    if buy_timing and buy_timing.get("verdict"):
+        bt = buy_timing
+        bt_emoji = bt.get("emoji", "🟡")
+        if bt["verdict"] in ("WAIT", "WAIT_IF_POSSIBLE"):
+            output.append(f"  ⏰ TIMING: {bt_emoji} {bt.get('summary', '')}")
+        elif bt["verdict"] == "BUY_NOW":
+            output.append(f"  ⏰ TIMING: {bt_emoji} {bt.get('summary', '')}")
         else:
-            error = result.get("error", "Unknown error")
-            if "No " in error and "key" in error.lower():
-                output.append(f"⬚ {name.title()}: API key not configured")
-            else:
-                output.append(f"❌ {name.title()}: {error[:60]}")
+            output.append(f"  ⏰ TIMING: {bt_emoji} {bt.get('summary', '')}")
+        for detail in bt.get("details", []):
+            output.append(f"     {detail}")
+        output.append("")
 
-    # ── Fake Review Detection (Enhanced) ──
-    output.append("\n" + "─" * 50)
-    output.append("🕵️ FAKE REVIEW ANALYSIS")
-    output.append("─" * 50)
+    # ════════════════════════════════════════════════════════════
+    # 🔍 DEEP ANALYSIS — Detailed sections
+    # ════════════════════════════════════════════════════════════
+
+    output.append("┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄")
+    output.append("                    🔍 DEEP ANALYSIS")
+    output.append("┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄")
+    output.append("")
+
+    # ── 🕵️ Fake Review Analysis ──
+    output.append("  🕵️  FAKE REVIEW ANALYSIS")
+    output.append("  " + "─" * 40)
+
+    risk_visual = {"high": "🔴🔴🔴🔴🔴", "medium": "🟡🟡🟡⚪⚪", "low": "🟢🟢⚪⚪⚪", "limited": "🟡⚪⚪⚪⚪", "unknown": "⚪⚪⚪⚪⚪"}.get(risk, "⚪⚪⚪⚪⚪")
+    output.append(f"  Risk Level: {risk_visual}  {risk.upper()}")
 
     if risk == "insufficient_data":
-        output.append(f"⚪ {fake_analysis.get('reason', 'Not enough reviews for analysis')}")
-    elif risk == "limited":
-        has_suspicious = fake_analysis.get("has_suspicious", False)
-        output.append(f"{'🟡' if has_suspicious else '🟢'} Limited data ({fake_analysis.get('total_analyzed', 0)} reviews)")
-        if has_suspicious:
-            output.append(f"   ⚠️ {fake_analysis.get('suspicious_count', 0)} suspicious reviews detected")
-    else:
-        output.append(f"{risk_emoji} Risk: {risk.upper()} — {fake_analysis.get('score', 0)}% suspicious")
-        output.append(f"   {fake_analysis.get('suspicious_count', 0)}/{fake_analysis.get('total_analyzed', 0)} reviews flagged")
-        output.append(f"   Method: {fake_analysis.get('method', 'N/A')} ({fake_analysis.get('model_accuracy', 'N/A')} accuracy)")
+        output.append(f"  {fake_analysis.get('reason', 'Not enough reviews for analysis')}")
+    elif risk not in ("unknown",):
+        score = fake_analysis.get("score", 0)
+        total = fake_analysis.get("total_analyzed", 0)
+        suspicious = fake_analysis.get("suspicious_count", 0)
+        output.append(f"  {suspicious}/{total} reviews flagged as suspicious ({score}%)")
+        method = fake_analysis.get("method", "")
+        if method:
+            output.append(f"  Method: {method} ({fake_analysis.get('model_accuracy', 'N/A')} accuracy)")
 
-    # Enhanced: adjusted rating and patterns
     if fake_review_summary:
         adj_rating = fake_review_summary.get("adjusted_rating")
         orig_rating = fake_review_summary.get("original_rating")
         if adj_rating is not None and orig_rating is not None:
             diff = orig_rating - adj_rating
             if diff > 0.1:
-                output.append(f"   📊 Adjusted rating: {adj_rating}★ (was {orig_rating}★, -{diff:.1f} without suspicious)")
-            else:
-                output.append(f"   📊 Rating holds at {adj_rating}★ after filtering")
-
+                output.append(f"  📊 Real rating: {adj_rating}★ (listed as {orig_rating}★)")
         patterns = fake_review_summary.get("common_patterns", [])
         if patterns:
-            output.append(f"   🔍 Patterns: {', '.join(patterns[:3])}")
+            output.append(f"  🔍 Patterns: {', '.join(patterns[:3])}")
+    output.append("")
 
-        # Cross-verification
-        cv = fake_review_summary.get("cross_verification", {})
-        agreement = cv.get("agreement")
-        if agreement == "AGREE_ISSUES":
-            output.append(f"   ⚠️ Cross-verified: Both AI + ReviewMeta flag issues (HIGH confidence)")
-        elif agreement == "AGREE_CLEAN":
-            output.append(f"   ✅ Cross-verified: Both AI + ReviewMeta say reviews look genuine")
-        elif agreement == "DISAGREE":
-            output.append(f"   🔶 AI and ReviewMeta disagree — check manually")
-
-        # Trustworthy reviews
-        trustworthy = fake_review_summary.get("trustworthy_reviews", [])
-        if trustworthy:
-            output.append(f"   📝 Best quality reviews ({len(trustworthy)} found):")
-            for tr in trustworthy[:2]:
-                vp = " ✓VP" if tr.get("verified_purchase") else ""
-                output.append(f"      {tr.get('rating', '?')}★{vp}: \"{tr['text'][:80]}...\"")
-
-    # Show flagged review snippets (if not already shown via trustworthy)
-    if not fake_review_summary or not fake_review_summary.get("trustworthy_reviews"):
-        for flagged in fake_analysis.get("flagged_reviews", [])[:2]:
-            output.append(f"   📝 \"{flagged['text']}\" (conf: {flagged['confidence']})")
-
-    # ── Regret Detector ──
-    if regret_analysis.get("warning"):
-        output.append("\n" + "─" * 50)
-        output.append("⏰ REGRET DETECTOR")
-        output.append("─" * 50)
-        output.append(f"⚠️ {regret_analysis['warning']}")
-        if regret_analysis.get("early_avg") and regret_analysis.get("recent_avg"):
-            output.append(f"   Early avg: {regret_analysis['early_avg']}★ → Recent avg: {regret_analysis['recent_avg']}★")
-
-    # ── Confidence Score ──
-    output.append("\n" + "─" * 50)
-    output.append("🎯 CONFIDENCE SCORE")
-    output.append("─" * 50)
-    output.append(f"{conf_emoji} Overall: {confidence.get('overall', 0):.0%} ({conf_level})")
-    output.append(f"   📊 Sufficiency: {confidence.get('sufficiency', 0):.0%} | Agreement: {confidence.get('agreement', 0):.0%} | Quality: {confidence.get('quality', 0):.0%}")
-    output.append(f"   Sources: {confidence.get('sources_used', 0)}/{confidence.get('sources_total', 0)} responded")
-
-    # ── Review Timeline Analysis (NEW) ──
+    # ── 📅 Review Timeline ──
     if timeline_analysis and timeline_analysis.get("risk") != "unknown":
-        output.append("\n" + "─" * 50)
-        output.append("📅 REVIEW TIMELINE ANALYSIS")
-        output.append("─" * 50)
-        risk = timeline_analysis.get("risk", "unknown")
-        risk_emojis = {"high": "🔴", "medium": "🟠", "low": "🟡", "clean": "🟢"}
-        output.append(f"{risk_emojis.get(risk, '⚪')} {timeline_analysis.get('message', '')}")
-        date_range = timeline_analysis.get("date_range", {})
+        tl = timeline_analysis
+        tl_risk = tl.get("risk", "unknown")
+        output.append("  📅 REVIEW TIMELINE")
+        output.append("  " + "─" * 40)
+        tl_visual = {"high": "🔴", "medium": "🟠", "low": "🟡", "clean": "🟢"}.get(tl_risk, "⚪")
+        output.append(f"  {tl_visual} {tl.get('message', '')}")
+        date_range = tl.get("date_range", {})
         if date_range.get("earliest") and date_range.get("latest"):
-            output.append(f"   📆 Range: {date_range['earliest']} → {date_range['latest']} ({timeline_analysis.get('total_analyzed', 0)} dated reviews)")
-        for pattern in timeline_analysis.get("patterns", []):
-            output.append(f"   {pattern.get('detail', '')}")
+            output.append(f"  📆 {date_range['earliest']} → {date_range['latest']} ({tl.get('total_analyzed', 0)} reviews)")
+        for pattern in tl.get("patterns", []):
+            output.append(f"  {pattern.get('detail', '')}")
+        output.append("")
 
-    # ── Category Price Benchmark (NEW) ──
-    if price_benchmark and price_benchmark.get("verdict") not in ("unknown", "insufficient_data"):
-        output.append("\n" + "─" * 50)
-        output.append("💲 PRICE BENCHMARK")
-        output.append("─" * 50)
-        emoji = price_benchmark.get("emoji", "🟡")
-        output.append(f"{emoji} {price_benchmark.get('message', '')}")
-        cat_avg = price_benchmark.get("category_avg")
-        cat_min = price_benchmark.get("category_min")
-        cat_max = price_benchmark.get("category_max")
-        percentile = price_benchmark.get("percentile", 0)
-        if cat_avg:
-            output.append(f"   Category avg: ₹{cat_avg:,.0f} | Range: ₹{cat_min:,.0f} — ₹{cat_max:,.0f}")
-            output.append(f"   You're in the {percentile}th percentile (higher = more expensive)")
-            output.append(f"   Compared against {price_benchmark.get('comparable_products', 0)} similar products")
-
-    # ── Review Quality Score (NEW) ──
+    # ── 📝 Review Quality ──
     if review_quality and review_quality.get("total", 0) > 0:
-        output.append("\n" + "─" * 50)
-        output.append("📝 REVIEW QUALITY")
-        output.append("─" * 50)
-        level = review_quality.get("level", "unknown")
-        level_emojis = {"high": "🟢", "medium": "🟡", "low": "🔴", "none": "⚪"}
-        output.append(f"{level_emojis.get(level, '⚪')} Score: {review_quality.get('score', 0)}/100")
-        output.append(f"   {review_quality.get('message', '')}")
-        output.append(f"   📊 Detailed: {review_quality.get('detailed_count', 0)} | Medium: {review_quality.get('moderate_count', 0)} | One-liners: {review_quality.get('one_liner_count', 0)}")
-        output.append(f"   ✅ Verified: {review_quality.get('verified_pct', 0)}% | Avg length: {review_quality.get('avg_word_count', 0)} words")
+        rq = review_quality
+        output.append("  📝 REVIEW QUALITY")
+        output.append("  " + "─" * 40)
+        score = rq.get("score", 0)
+        quality_bar = _make_bar(score / 100, 10)
+        level_label = {"high": "EXCELLENT", "medium": "DECENT", "low": "POOR"}.get(rq.get("level", ""), "N/A")
+        output.append(f"  {quality_bar}  {score}/100 — {level_label}")
+        output.append(f"  📊 Detailed: {rq.get('detailed_count', 0)} • Medium: {rq.get('moderate_count', 0)} • One-liners: {rq.get('one_liner_count', 0)}")
+        output.append(f"  ✅ {rq.get('verified_pct', 0)}% verified purchase • avg {rq.get('avg_word_count', 0)} words")
+        output.append("")
 
-    # ── Price Prediction ──
+    # ── ⏰ Regret Detector ──
+    if regret_analysis.get("warning"):
+        output.append("  ⏰ REGRET DETECTOR")
+        output.append("  " + "─" * 40)
+        output.append(f"  ⚠️ {regret_analysis['warning']}")
+        if regret_analysis.get("early_avg") and regret_analysis.get("recent_avg"):
+            output.append(f"  Early: {regret_analysis['early_avg']}★ → Recent: {regret_analysis['recent_avg']}★")
+        output.append("")
+
+    # ── 📈 Price Prediction ──
     if price_prediction and not price_prediction.get("error"):
-        output.append("\n" + "─" * 50)
-        method = price_prediction.get("method", "arima")
-        method_label = {
-            "arima": "ARIMA",
-            "statistical": "Statistical",
-            "sale_calendar_only": "Sale Calendar",
-            "stable_price": "Stable Price",
-        }.get(method, method.upper())
-        output.append(f"📈 PRICE PREDICTION ({method_label})")
-        output.append("─" * 50)
+        pp = price_prediction
+        method = pp.get("method", "arima")
+        method_label = {"arima": "ARIMA", "statistical": "Statistical", "sale_calendar_only": "Sale Calendar", "stable_price": "Stable"}.get(method, method.upper())
+        output.append(f"  📈 PRICE PREDICTION ({method_label})")
+        output.append("  " + "─" * 40)
 
-        best_action = price_prediction.get("best_action", "")
-        explanation = price_prediction.get("explanation", "")
-        pred_lowest = price_prediction.get("predicted_lowest")
-        savings = price_prediction.get("savings_estimate", 0)
-        savings_pct = price_prediction.get("savings_percentage", 0)
-        drop_prob = price_prediction.get("drop_probability", 0)
-        current_vs_avg = price_prediction.get("current_vs_average", "unknown")
-
-        # Best action callout
+        best_action = pp.get("best_action", "")
         if "WAIT" in str(best_action):
-            output.append(f"⏳ **{best_action.replace('_', ' ')}**")
+            output.append(f"  ⏳ {best_action.replace('_', ' ')}")
         elif best_action == "PRICE_IS_LOW":
-            output.append(f"🎉 **PRICE IS LOW** — near historical bottom!")
+            output.append("  🎉 PRICE IS LOW — near historical bottom!")
         else:
-            output.append(f"✅ **{best_action.replace('_', ' ')}**")
+            output.append(f"  ✅ {best_action.replace('_', ' ')}")
 
+        explanation = pp.get("explanation", "")
         if explanation:
-            output.append(f"   {explanation}")
+            output.append(f"  {explanation}")
 
+        pred_lowest = pp.get("predicted_lowest")
         if pred_lowest and method != "sale_calendar_only":
-            output.append(f"📉 Predicted lowest: ₹{pred_lowest:,.0f}")
-        if drop_prob > 0:
-            output.append(f"🎯 Drop probability (>5%): {drop_prob:.0%}")
-        if savings > 0 and savings_pct > 0:
-            output.append(f"💰 Expected savings: ₹{savings:,.0f} ({savings_pct:.1f}%)")
-        if current_vs_avg != "unknown":
-            avg_emoji = "📈" if current_vs_avg == "above_average" else "📉" if current_vs_avg == "below_average" else "➡️"
-            output.append(f"{avg_emoji} Current price: {current_vs_avg.replace('_', ' ')}")
+            output.append(f"  📉 Predicted lowest: ₹{pred_lowest:,.0f}")
 
-        pred_confidence = price_prediction.get("confidence", 0)
-        if pred_confidence > 0:
-            output.append(f"🔬 Prediction confidence: {pred_confidence:.0%}")
+        savings = pp.get("savings_estimate", 0)
+        savings_pct = pp.get("savings_percentage", 0)
+        if savings > 0:
+            output.append(f"  💰 Could save: ₹{savings:,.0f} ({savings_pct:.1f}%)")
+
+        pred_conf = pp.get("confidence", 0)
+        if pred_conf > 0:
+            output.append(f"  🔬 Confidence: {pred_conf:.0%}")
+        output.append("")
 
     # ── Upcoming Sales ──
     upcoming_sales = price_prediction.get("upcoming_sales", []) if price_prediction else []
     if upcoming_sales:
-        output.append("\n" + "─" * 50)
-        output.append("📅 UPCOMING SALES")
-        output.append("─" * 50)
-        for sale in upcoming_sales[:4]:
-            output.append(f"   🏷️ {sale['name']} — in ~{sale['days_away']} days ({sale['typical_discount']} off)")
+        output.append("  📅 UPCOMING SALES")
+        output.append("  " + "─" * 40)
+        for sale in upcoming_sales[:3]:
+            days = sale.get("days_away", "?")
+            output.append(f"  🏷️ {sale['name']} — {days} days away ({sale['typical_discount']} off)")
+        output.append("")
 
-    # ── Alternatives ──
+    # ════════════════════════════════════════════════════════════
+    # 🛍️ ALTERNATIVES & PRICES
+    # ════════════════════════════════════════════════════════════
+
     alts_list = alternatives.get("alternatives", []) if alternatives else []
+    google_result = source_results.get("google_shopping", {})
+    gs_items = google_result.get("data", {}).get("items", []) if google_result.get("success") else []
+
+    if alts_list or gs_items:
+        output.append("┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄")
+        output.append("                  🛍️  ALTERNATIVES & PRICES")
+        output.append("┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄")
+        output.append("")
+
     if alts_list:
-        output.append("\n" + "─" * 50)
-        output.append("🔄 ALTERNATIVES")
-        output.append("─" * 50)
-        for i, alt in enumerate(alts_list[:3], 1):
+        for i, alt in enumerate(alts_list[:5], 1):
             alt_price = alt.get("price_display", alt.get("price", "N/A"))
             alt_rating = alt.get("rating")
             savings_pct_alt = alt.get("savings_percentage", 0)
             why = alt.get("why_better", "")
-
-            output.append(f"   {i}. {alt.get('title', 'Unknown')[:70]}")
-            rating_str = f" | ⭐ {alt_rating}" if alt_rating else ""
-            savings_str = f" | 💰 {savings_pct_alt:.0f}% cheaper" if savings_pct_alt > 0 else ""
-            output.append(f"      💰 {alt_price}{rating_str}{savings_str}")
-            if why:
-                output.append(f"      ✨ {why}")
             source = alt.get("source", "")
-            if source:
-                output.append(f"      📍 {source}")
 
-    # ── Google Shopping Price Comparison ──
-    google_result = source_results.get("google_shopping", {})
-    if google_result.get("success"):
-        gs_data = google_result["data"]
-        items = gs_data.get("items", [])
-        if items:
-            output.append("\n" + "─" * 50)
-            output.append("🔍 PRICE COMPARISON (Google Shopping)")
-            output.append("─" * 50)
-            for item in items[:3]:
-                output.append(f"   • {item.get('source', 'Unknown')}: {item.get('price', 'N/A')} — {item.get('title', '')[:50]}")
-            if gs_data.get("lowest_price"):
-                output.append(f"   💡 Lowest: {gs_data['lowest_price']} at {gs_data.get('lowest_source', 'Unknown')}")
+            name = alt.get("title", "Unknown")[:60]
+            rating_str = f"⭐{alt_rating}" if alt_rating else ""
+            savings_str = f" 💚 {savings_pct_alt:.0f}% cheaper" if savings_pct_alt > 0 else ""
+            source_str = f" @ {source}" if source else ""
 
-    # ── Coupon Sniper ──
-    output.append("\n" + "─" * 50)
-    output.append("🎯 COUPON SNIPER")
-    output.append("─" * 50)
-
-    if coupons and coupons.get("found", 0) > 0:
-        for coupon in coupons.get("coupons", []):
-            conf = coupon.get("confidence", 0)
-            badge = "✅" if conf >= 0.8 else "⚠️"
-            code = coupon.get("code", "")
-            if code == "CLIP_COUPON":
-                output.append(f"  {badge} 🏷️ Clip Coupon: {coupon['discount']}")
-            elif code == "SUBSCRIBE_SAVE":
-                output.append(f"  {badge} 📦 Subscribe & Save: {coupon['discount']}")
-            elif code != "NO_CODE":
-                output.append(f"  {badge} 💰 {code}: {coupon['discount']}")
-            else:
-                output.append(f"  {badge} 🏷️ Deal: {coupon['discount']}")
-    else:
-        output.append("  ❌ No verified coupon codes available")
-        output.append("  ℹ️  We show nothing rather than unverified codes")
-
-    # Cashback
-    if coupons and coupons.get("cashback"):
+            output.append(f"  {i}. {name}")
+            output.append(f"     💰 {alt_price}  {rating_str}{savings_str}{source_str}")
+            if why:
+                output.append(f"     ✨ {why}")
         output.append("")
-        output.append("  💸 CASHBACK:")
-        for cb in coupons["cashback"]:
-            note = f" — {cb['note']}" if cb.get("note") else ""
-            output.append(f"    • {cb['platform']}: {cb['rate']} cashback{note}")
 
-    # UPI / Wallets (India-specific)
-    if coupons and coupons.get("upi_wallets"):
+    if gs_items:
+        output.append("  🔍 Cross-Store Prices:")
+        for item in gs_items[:5]:
+            item_price = item.get("price", "N/A")
+            item_source = item.get("source", "Unknown")
+            item_title = item.get("title", "")[:45]
+            output.append(f"     {item_source}: {item_price} — {item_title}")
+        lowest = google_result.get("data", {}).get("lowest_price")
+        lowest_source = google_result.get("data", {}).get("lowest_source", "")
+        if lowest:
+            output.append(f"     🏆 Lowest: {lowest} at {lowest_source}")
         output.append("")
-        output.append("  📱 UPI & WALLET OFFERS:")
-        for upi in coupons["upi_wallets"]:
-            max_cb = f" (max {upi['max_cashback']})" if upi.get("max_cashback") else ""
-            output.append(f"    • {upi['wallet']}: {upi['benefit']}{max_cb}")
-            if upi.get("note"):
-                output.append(f"      💡 {upi['note']}")
 
-    # Credit Cards
-    if coupons and coupons.get("credit_cards"):
+    # ════════════════════════════════════════════════════════════
+    # 💳 SAVINGS & COUPONS
+    # ════════════════════════════════════════════════════════════
+
+    if coupons:
+        output.append("┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄")
+        output.append("                    💳 SAVINGS & COUPONS")
+        output.append("┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄")
         output.append("")
-        output.append("  💳 BEST CARDS:")
-        for card in coupons["credit_cards"]:
-            special = f" {card['special']}" if card.get("special") else ""
-            savings_card = f" (save ~₹{card['savings_estimate']:.0f})" if card.get("savings_estimate") else ""
-            output.append(f"    • {card['card']}: {card['benefit']}{savings_card}{special}")
-            output.append(f"      💡 {card['shopping_tip']}")
 
-    # Best Combo
-    if coupons and coupons.get("best_combo"):
-        combo = coupons["best_combo"]
-        output.append("")
-        output.append("  🏆 BEST COMBO:")
-        output.append(f"    {combo['strategy']}")
-        output.append(f"    💵 Save ₹{combo['total_savings']:.0f} ({combo['savings_percentage']}% off!)")
-        output.append(f"    🏷️ Final: ₹{combo['final_price']:.0f} (was ₹{combo['original_price']:.0f})")
+        # Coupons
+        if coupons.get("found", 0) > 0:
+            output.append("  🏷️ ACTIVE COUPONS:")
+            for coupon in coupons.get("coupons", []):
+                conf = coupon.get("confidence", 0)
+                badge = "✅" if conf >= 0.8 else "⚠️"
+                code = coupon.get("code", "")
+                if code == "CLIP_COUPON":
+                    output.append(f"  {badge} Clip Coupon: {coupon['discount']}")
+                elif code == "SUBSCRIBE_SAVE":
+                    output.append(f"  {badge} Subscribe & Save: {coupon['discount']}")
+                elif code != "NO_CODE":
+                    output.append(f"  {badge} Code: {code} → {coupon['discount']}")
+                else:
+                    output.append(f"  {badge} Deal: {coupon['discount']}")
+            output.append("")
 
-    # Advice
-    if coupons and coupons.get("advice"):
-        output.append(f"\n  📌 {coupons['advice']}")
+        # Cashback
+        if coupons.get("cashback"):
+            output.append("  💸 CASHBACK OPTIONS:")
+            for cb in coupons["cashback"][:3]:
+                note = f" ({cb['note']})" if cb.get("note") else ""
+                output.append(f"     • {cb['platform']}: {cb['rate']}{note}")
+            output.append("")
 
-    # ── Buy Timing Advisor (NEW) ──
-    if buy_timing and buy_timing.get("verdict"):
-        output.append("\n" + "─" * 50)
-        output.append("⏰ BUY TIMING ADVISOR")
-        output.append("─" * 50)
-        bt_emoji = buy_timing.get("emoji", "🟡")
-        output.append(f"{bt_emoji} {buy_timing.get('summary', '')}")
-        for detail in buy_timing.get("details", []):
-            output.append(f"   {detail}")
+        # UPI/Wallet
+        if coupons.get("upi_wallets"):
+            output.append("  📱 UPI & WALLETS:")
+            for upi in coupons["upi_wallets"][:2]:
+                output.append(f"     • {upi['wallet']}: {upi['benefit']}")
+            output.append("")
 
-    # ── Price Drop Alerts (NEW) ──
+        # Credit Cards — show top 3 only, cleaner format
+        if coupons.get("credit_cards"):
+            output.append("  💳 BEST CARDS FOR THIS PURCHASE:")
+            for card in coupons["credit_cards"][:3]:
+                special = card.get("special", "")
+                savings_card = f" (save ~₹{card['savings_estimate']:.0f})" if card.get("savings_estimate") else ""
+                fire = " 🔥" if special and "BEST" in special else ""
+                output.append(f"     • {card['card']}: {card['benefit']}{savings_card}{fire}")
+            output.append("")
+
+    # ════════════════════════════════════════════════════════════
+    # 🔔 PRICE ALERTS — Actionable links
+    # ════════════════════════════════════════════════════════════
+
     if price_alerts and price_alerts.get("alerts"):
-        output.append("\n" + "─" * 50)
-        output.append("🔔 PRICE DROP ALERTS")
-        output.append("─" * 50)
-        output.append(f"   {price_alerts.get('message', '')}")
-        targets = price_alerts.get("targets", [])
+        pa = price_alerts
+        output.append("  🔔 SET PRICE DROP ALERTS:")
+        targets = pa.get("targets", [])
         if targets:
-            output.append(f"   🎯 Targets: " + " | ".join(f"-{t['drop_pct']}% = ₹{t['target_price']:,}" for t in targets))
-        for alert in price_alerts.get("alerts", []):
-            output.append(f"   • {alert['service']}: {alert['description']} ({alert['cost']})")
-            output.append(f"     🔗 {alert['url']}")
+            target_str = " | ".join(f"-{t['drop_pct']}% = ₹{t['target_price']:,}" for t in targets)
+            output.append(f"  🎯 {target_str}")
+        for alert in pa.get("alerts", [])[:3]:
+            output.append(f"     → {alert['service']}: {alert['url']}")
+        output.append("")
 
-    # ── AI Verdict (full text) ──
-    output.append("\n" + "─" * 50)
-    output.append("🤖 AI VERDICT")
-    output.append("─" * 50)
-    output.append(f"\n{verdict_emoji} **{verdict_keyword}**")
+    # ════════════════════════════════════════════════════════════
+    # 🤖 AI VERDICT — Full analysis
+    # ════════════════════════════════════════════════════════════
+
+    output.append("┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄")
+    output.append("                      🤖 AI VERDICT")
+    output.append("┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄")
+    output.append("")
     if ai_verdict:
-        output.append(f"\n{ai_verdict}")
+        output.append(f"  {ai_verdict}")
+    else:
+        output.append("  AI analysis unavailable — check LLM API key")
+    output.append("")
 
-    # ── 💡 QUICK ACTIONS ──
-    quick_actions = _generate_quick_actions(
-        verdict_keyword, price_prediction, coupons, alternatives, amazon_data, source_results
-    )
-    if quick_actions:
-        output.append("\n" + "─" * 50)
-        output.append("💡 QUICK ACTIONS")
-        output.append("─" * 50)
-        for action in quick_actions[:3]:
-            output.append(f"  → {action}")
+    # ════════════════════════════════════════════════════════════
+    # 📊 DATA SOURCES — Compact grid
+    # ════════════════════════════════════════════════════════════
+
+    output.append("  📊 DATA SOURCES:")
+    source_line = []
+    for name, result in source_results.items():
+        if result.get("success"):
+            source_line.append(f"✅ {name.replace('_', ' ').title()}")
+        else:
+            error = result.get("error", "")
+            if "key" in error.lower():
+                source_line.append(f"⬚ {name.replace('_', ' ').title()}")
+            else:
+                source_line.append(f"❌ {name.replace('_', ' ').title()}")
+    # Print in rows of 3
+    for i in range(0, len(source_line), 3):
+        chunk = source_line[i:i+3]
+        output.append("  " + "  │  ".join(chunk))
+    output.append("")
 
     # ── Footer ──
-    output.append("\n" + "━" * 50)
+    output.append("╔══════════════════════════════════════════════════╗")
     failed_sources = summary.get("failed_sources", [])
-    if failed_sources:
-        missing_note = f" | Missing: {', '.join(failed_sources[:3])}" + ("..." if len(failed_sources) > 3 else "")
-    else:
-        missing_note = ""
-    output.append(f"✅ {sources_used}/{sources_total} sources analyzed{missing_note}")
-    output.append("Powered by Shopping Truth Agent v2.0")
-    output.append("━" * 50)
+    missing_note = f" Missing: {', '.join(failed_sources[:3])}" if failed_sources else ""
+    output.append(f"║  ✅ {sources_used}/{sources_total} sources  │  Confidence: {conf_pct:.0%}  │  {verdict_keyword}")
+    if missing_note:
+        output.append(f"║ {missing_note}")
+    output.append("║  Powered by Shopping Truth Agent v2.0            ║")
+    output.append("╚══════════════════════════════════════════════════╝")
 
     return "\n".join(output)
+
+
+def _make_bar(pct: float, length: int = 10) -> str:
+    """Create a visual progress bar."""
+    filled = int(pct * length)
+    filled = max(0, min(length, filled))
+    return "█" * filled + "░" * (length - filled)
 
 
 def _get_biggest_saving(price_prediction: Dict, coupons: Dict, alternatives: Dict, current_price: float) -> str:
