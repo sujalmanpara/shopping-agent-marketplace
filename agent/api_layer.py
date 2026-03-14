@@ -99,26 +99,14 @@ def extract_asin(url_or_text: str) -> Optional[str]:
         return match.group(1)
     return None
 
-def extract_flipkart_id(url_or_text: str) -> Optional[str]:
-    """Extract Flipkart product ID from URL."""
-    match = re.search(r'flipkart\.com/.*?/p/([a-z0-9]+)', url_or_text, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    match = re.search(r'pid=([A-Z0-9]+)', url_or_text)
-    if match:
-        return match.group(1)
-    return None
-
 def detect_platform(url_or_text: str) -> str:
-    """Detect which platform the URL belongs to."""
+    """Detect which platform the URL belongs to. Amazon only for now."""
     text = url_or_text.lower()
     if 'amazon' in text:
         if 'amazon.in' in text:
             return 'amazon_in'
         return 'amazon_com'
-    if 'flipkart' in text:
-        return 'flipkart'
-    return 'unknown'
+    return 'amazon_in'  # Default to Amazon IN
 
 # ============================================================
 # SOURCE 1: Amazon Product Data
@@ -1120,7 +1108,8 @@ async def fetch_all_sources(asin: str, product_name: str, brand: str = "", count
         "google_shopping": fetch_google_shopping(product_name, country, keys),
         # Fakespot removed — API defunct (acquired by Mozilla 2023)
         # Our XGBoost ML model handles fake review detection locally
-        "reviewmeta": fetch_reviewmeta(asin),
+        # ReviewMeta removed — consistently times out, scraping-based (not a real API)
+        # Local XGBoost ML (95.2%) handles fake review detection instead
         "wirecutter": fetch_wirecutter(product_name),
         "rtings": fetch_rtings(product_name),
         "trustpilot": fetch_trustpilot(brand),
