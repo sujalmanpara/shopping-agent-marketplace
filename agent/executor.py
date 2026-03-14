@@ -193,7 +193,9 @@ async def execute(
 
     # ── Step 5b: Buy Timing + Price Alerts ──
     buy_timing = analyze_buy_timing(price_numeric, price_prediction, country)
-    price_alerts = generate_price_alerts(asin, price_numeric, country)
+    # Only show price alerts when we have real price history (Keepa)
+    has_keepa = keys.get("KEEPA_API_KEY", "") != ""
+    price_alerts = generate_price_alerts(asin, price_numeric, country) if has_keepa else None
 
     # ── Step 6: Coupon & Savings ──
     yield sse_event("status", "💰 Checking coupons, cashback & credit card benefits...")
