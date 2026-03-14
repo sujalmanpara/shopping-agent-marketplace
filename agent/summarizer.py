@@ -493,6 +493,29 @@ def format_beautiful_output(
     output.append("┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄")
     output.append("")
 
+    # ── 📺 Top Video Reviews ──
+    yt_result = source_results.get("youtube", {})
+    if yt_result.get("success"):
+        yt_videos = yt_result.get("data", {}).get("videos", [])
+        if yt_videos:
+            output.append("  📺 TOP VIDEO REVIEWS")
+            output.append("  " + "─" * 40)
+            for v in yt_videos[:2]:
+                views = v.get("views", 0)
+                if views >= 1_000_000:
+                    views_str = f"{views / 1_000_000:.1f}M views"
+                elif views >= 1_000:
+                    views_str = f"{views / 1_000:.0f}K views"
+                else:
+                    views_str = f"{views} views"
+                channel = v.get("channel", "Unknown")
+                vid_title = v.get("title", "")[:55]
+                url = v.get("url", "")
+                output.append(f"  🎬 {vid_title}")
+                output.append(f"     {channel}  •  {views_str}")
+                output.append(f"     ▶ {url}")
+                output.append("")
+
     # ── 🕵️ Fake Review Analysis ──
     output.append("  🕵️  FAKE REVIEW ANALYSIS")
     output.append("  " + "─" * 40)
