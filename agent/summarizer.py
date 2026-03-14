@@ -350,6 +350,11 @@ def format_beautiful_output(
     summary: Dict,
     alternatives: Dict = None,
     fake_review_summary: Dict = None,
+    timeline_analysis: Dict = None,
+    price_benchmark: Dict = None,
+    review_quality: Dict = None,
+    buy_timing: Dict = None,
+    price_alerts: Dict = None,
 ) -> str:
     """
     Format all data into a beautiful, readable two-tier output.
@@ -411,6 +416,10 @@ def format_beautiful_output(
     risk_emoji = "🔴" if risk == "high" else "🟡" if risk in ("medium", "limited") else "🟢" if risk == "low" else "⚪"
     sources_used = summary.get("succeeded", 0)
     sources_total = summary.get("total", 10)
+
+    # TL;DR line 4: price benchmark (if available)
+    if price_benchmark and price_benchmark.get("verdict") not in ("unknown", "insufficient_data", None):
+        output.append(f"{price_benchmark.get('emoji', '🟡')} Price: {price_benchmark.get('message', '')}")
 
     output.append(f"{conf_emoji} Confidence: {conf_level} | {risk_emoji} Fake Risk: {risk.upper()} | 📊 {sources_used}/{sources_total} sources")
 
@@ -539,6 +548,48 @@ def format_beautiful_output(
     output.append(f"{conf_emoji} Overall: {confidence.get('overall', 0):.0%} ({conf_level})")
     output.append(f"   📊 Sufficiency: {confidence.get('sufficiency', 0):.0%} | Agreement: {confidence.get('agreement', 0):.0%} | Quality: {confidence.get('quality', 0):.0%}")
     output.append(f"   Sources: {confidence.get('sources_used', 0)}/{confidence.get('sources_total', 0)} responded")
+
+    # ── Review Timeline Analysis (NEW) ──
+    if timeline_analysis and timeline_analysis.get("risk") != "unknown":
+        output.append("\n" + "─" * 50)
+        output.append("📅 REVIEW TIMELINE ANALYSIS")
+        output.append("─" * 50)
+        risk = timeline_analysis.get("risk", "unknown")
+        risk_emojis = {"high": "🔴", "medium": "🟠", "low": "🟡", "clean": "🟢"}
+        output.append(f"{risk_emojis.get(risk, '⚪')} {timeline_analysis.get('message', '')}")
+        date_range = timeline_analysis.get("date_range", {})
+        if date_range.get("earliest") and date_range.get("latest"):
+            output.append(f"   📆 Range: {date_range['earliest']} → {date_range['latest']} ({timeline_analysis.get('total_analyzed', 0)} dated reviews)")
+        for pattern in timeline_analysis.get("patterns", []):
+            output.append(f"   {pattern.get('detail', '')}")
+
+    # ── Category Price Benchmark (NEW) ──
+    if price_benchmark and price_benchmark.get("verdict") not in ("unknown", "insufficient_data"):
+        output.append("\n" + "─" * 50)
+        output.append("💲 PRICE BENCHMARK")
+        output.append("─" * 50)
+        emoji = price_benchmark.get("emoji", "🟡")
+        output.append(f"{emoji} {price_benchmark.get('message', '')}")
+        cat_avg = price_benchmark.get("category_avg")
+        cat_min = price_benchmark.get("category_min")
+        cat_max = price_benchmark.get("category_max")
+        percentile = price_benchmark.get("percentile", 0)
+        if cat_avg:
+            output.append(f"   Category avg: ₹{cat_avg:,.0f} | Range: ₹{cat_min:,.0f} — ₹{cat_max:,.0f}")
+            output.append(f"   You're in the {percentile}th percentile (higher = more expensive)")
+            output.append(f"   Compared against {price_benchmark.get('comparable_products', 0)} similar products")
+
+    # ── Review Quality Score (NEW) ──
+    if review_quality and review_quality.get("total", 0) > 0:
+        output.append("\n" + "─" * 50)
+        output.append("📝 REVIEW QUALITY")
+        output.append("─" * 50)
+        level = review_quality.get("level", "unknown")
+        level_emojis = {"high": "🟢", "medium": "🟡", "low": "🔴", "none": "⚪"}
+        output.append(f"{level_emojis.get(level, '⚪')} Score: {review_quality.get('score', 0)}/100")
+        output.append(f"   {review_quality.get('message', '')}")
+        output.append(f"   📊 Detailed: {review_quality.get('detailed_count', 0)} | Medium: {review_quality.get('moderate_count', 0)} | One-liners: {review_quality.get('one_liner_count', 0)}")
+        output.append(f"   ✅ Verified: {review_quality.get('verified_pct', 0)}% | Avg length: {review_quality.get('avg_word_count', 0)} words")
 
     # ── Price Prediction ──
     if price_prediction and not price_prediction.get("error"):
@@ -693,6 +744,29 @@ def format_beautiful_output(
     # Advice
     if coupons and coupons.get("advice"):
         output.append(f"\n  📌 {coupons['advice']}")
+
+    # ── Buy Timing Advisor (NEW) ──
+    if buy_timing and buy_timing.get("verdict"):
+        output.append("\n" + "─" * 50)
+        output.append("⏰ BUY TIMING ADVISOR")
+        output.append("─" * 50)
+        bt_emoji = buy_timing.get("emoji", "🟡")
+        output.append(f"{bt_emoji} {buy_timing.get('summary', '')}")
+        for detail in buy_timing.get("details", []):
+            output.append(f"   {detail}")
+
+    # ── Price Drop Alerts (NEW) ──
+    if price_alerts and price_alerts.get("alerts"):
+        output.append("\n" + "─" * 50)
+        output.append("🔔 PRICE DROP ALERTS")
+        output.append("─" * 50)
+        output.append(f"   {price_alerts.get('message', '')}")
+        targets = price_alerts.get("targets", [])
+        if targets:
+            output.append(f"   🎯 Targets: " + " | ".join(f"-{t['drop_pct']}% = ₹{t['target_price']:,}" for t in targets))
+        for alert in price_alerts.get("alerts", []):
+            output.append(f"   • {alert['service']}: {alert['description']} ({alert['cost']})")
+            output.append(f"     🔗 {alert['url']}")
 
     # ── AI Verdict (full text) ──
     output.append("\n" + "─" * 50)

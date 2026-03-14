@@ -21,7 +21,8 @@ from .api_layer import (
 )
 from .analyzers import (
     analyze_fake_reviews, analyze_regret_pattern, calculate_confidence,
-    get_fake_review_summary
+    get_fake_review_summary, analyze_review_timeline, analyze_price_benchmark,
+    analyze_review_quality, analyze_buy_timing, generate_price_alerts
 )
 from .summarizer import generate_summary, format_beautiful_output
 from .coupon_sniper import find_coupons
@@ -144,6 +145,19 @@ async def execute(
     # Enhanced fake review summary with ReviewMeta cross-verification
     fake_review_summary = get_fake_review_summary(reviews, fake_analysis, all_results)
 
+    # ── Step 4b: New analyses (zero API cost) ──
+    yield sse_event("status", "📊 Running timeline analysis, price benchmarking, review quality scoring...")
+
+    # Review Timeline Analyzer (detect review bombing)
+    timeline_analysis = analyze_review_timeline(reviews)
+
+    # Category Price Benchmark (compare against Google Shopping results)
+    google_shopping_result = source_results.get("google_shopping", {})
+    price_benchmark = analyze_price_benchmark(price_numeric, alternatives_result if isinstance(alternatives_result, dict) else {}, google_shopping_result)
+
+    # Review Quality Score
+    review_quality = analyze_review_quality(reviews)
+
     # ── Step 5: Price Prediction with context ──
     price_prediction = {}
     keepa_result = source_results.get("keepa", {})
@@ -176,6 +190,10 @@ async def execute(
                 }
         except Exception:
             pass
+
+    # ── Step 5b: Buy Timing + Price Alerts ──
+    buy_timing = analyze_buy_timing(price_numeric, price_prediction, country)
+    price_alerts = generate_price_alerts(asin, price_numeric, country)
 
     # ── Step 6: Coupon & Savings ──
     yield sse_event("status", "💰 Checking coupons, cashback & credit card benefits...")
@@ -213,6 +231,11 @@ async def execute(
         summary=summary,
         alternatives=alternatives_data,
         fake_review_summary=fake_review_summary,
+        timeline_analysis=timeline_analysis,
+        price_benchmark=price_benchmark,
+        review_quality=review_quality,
+        buy_timing=buy_timing,
+        price_alerts=price_alerts,
     )
 
     yield sse_event("result", beautiful_output)

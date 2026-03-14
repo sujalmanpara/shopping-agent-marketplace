@@ -510,6 +510,486 @@ def _find_trustworthy_reviews(reviews: List[Dict], fake_analysis: Dict) -> List[
     return scored_reviews[:3]
 
 
+# ============================================================
+# FEATURE 8: Review Timeline Analyzer — detect review bombing
+# ============================================================
+
+def analyze_review_timeline(reviews: List[Dict]) -> Dict:
+    """
+    Detect suspicious review timing patterns:
+    - Review bombing (mass 5★ reviews in a short window)
+    - Review drought (no reviews for months then sudden burst)
+    - Incentivized review waves (common with product launches)
+    
+    Uses only review dates already fetched — zero API cost.
+    """
+    if not reviews or len(reviews) < 5:
+        return {
+            "risk": "unknown",
+            "message": "Not enough reviews to analyze timeline",
+            "patterns": [],
+            "total_analyzed": len(reviews) if reviews else 0,
+        }
+
+    from datetime import datetime, timedelta
+    from collections import Counter
+
+    patterns = []
+    dated_reviews = []
+
+    for r in reviews:
+        date_str = r.get("date", "")
+        if not date_str:
+            continue
+        # Try multiple date formats
+        parsed = None
+        for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%B %d, %Y", "%d %B %Y", "%b %d, %Y"]:
+            try:
+                parsed = datetime.strptime(date_str.split("T")[0] if "T" in date_str else date_str.strip(), fmt)
+                break
+            except (ValueError, AttributeError):
+                continue
+        if parsed:
+            dated_reviews.append({"date": parsed, "rating": float(r.get("rating", 0))})
+
+    if len(dated_reviews) < 5:
+        return {
+            "risk": "unknown",
+            "message": "Not enough dated reviews for timeline analysis",
+            "patterns": [],
+            "total_analyzed": len(dated_reviews),
+        }
+
+    # Sort oldest first
+    dated_reviews.sort(key=lambda x: x["date"])
+    risk_score = 0
+
+    # ── Pattern 1: Review clustering (many reviews in short window) ──
+    # Group by week
+    week_counts = Counter()
+    week_ratings = {}
+    for r in dated_reviews:
+        week_key = r["date"].strftime("%Y-W%U")
+        week_counts[week_key] += 1
+        week_ratings.setdefault(week_key, []).append(r["rating"])
+
+    avg_per_week = len(dated_reviews) / max(len(week_counts), 1)
+    
+    for week, count in week_counts.most_common(3):
+        # Detect clustering: either relative (3x avg) or absolute (>10 in one week + >50% of total)
+        is_cluster = (count > avg_per_week * 3 and count >= 5) or (count >= 10 and count > len(dated_reviews) * 0.4)
+        if is_cluster:
+            avg_rating = sum(week_ratings[week]) / len(week_ratings[week])
+            if avg_rating >= 4.5:
+                patterns.append({
+                    "type": "review_bombing",
+                    "severity": "high",
+                    "detail": f"🚨 {count} reviews in week {week} (avg: {avg_per_week:.0f}/week), all {avg_rating:.1f}★ avg",
+                })
+                risk_score += 3
+            else:
+                patterns.append({
+                    "type": "review_cluster",
+                    "severity": "medium",
+                    "detail": f"⚠️ {count} reviews clustered in week {week} (normal: {avg_per_week:.0f}/week)",
+                })
+                risk_score += 1
+
+    # ── Pattern 2: Rating flip (sudden shift from low to high or vice versa) ──
+    if len(dated_reviews) >= 10:
+        half = len(dated_reviews) // 2
+        first_half_avg = sum(r["rating"] for r in dated_reviews[:half]) / half
+        second_half_avg = sum(r["rating"] for r in dated_reviews[half:]) / (len(dated_reviews) - half)
+        shift = second_half_avg - first_half_avg
+
+        if shift > 1.5:
+            patterns.append({
+                "type": "rating_flip_up",
+                "severity": "high",
+                "detail": f"🚨 Rating jumped from {first_half_avg:.1f}★ → {second_half_avg:.1f}★ (possible paid review influx)",
+            })
+            risk_score += 3
+        elif shift < -1.5:
+            patterns.append({
+                "type": "rating_flip_down",
+                "severity": "medium",
+                "detail": f"📉 Rating dropped from {first_half_avg:.1f}★ → {second_half_avg:.1f}★ (quality decline?)",
+            })
+            risk_score += 1
+
+    # ── Pattern 3: Verified purchase ratio in high vs low ratings ──
+    high_verified = sum(1 for r in reviews if float(r.get("rating", 0)) >= 4 and r.get("verified", r.get("verified_purchase", False)))
+    high_total = sum(1 for r in reviews if float(r.get("rating", 0)) >= 4)
+    low_verified = sum(1 for r in reviews if float(r.get("rating", 0)) <= 2 and r.get("verified", r.get("verified_purchase", False)))
+    low_total = sum(1 for r in reviews if float(r.get("rating", 0)) <= 2)
+
+    if high_total >= 5 and low_total >= 3:
+        high_pct = high_verified / high_total
+        low_pct = low_verified / low_total if low_total > 0 else 0
+        if high_pct < low_pct - 0.3:
+            patterns.append({
+                "type": "unverified_positives",
+                "severity": "high",
+                "detail": f"🚨 Only {high_pct:.0%} of 5★ reviews are verified vs {low_pct:.0%} of 1-2★ reviews",
+            })
+            risk_score += 2
+
+    # ── Determine overall risk ──
+    if risk_score >= 4:
+        risk = "high"
+        message = "⚠️ Suspicious review timing detected — possible manipulation"
+    elif risk_score >= 2:
+        risk = "medium"
+        message = "Some unusual review patterns — proceed with caution"
+    elif patterns:
+        risk = "low"
+        message = "Minor timing irregularities, likely normal"
+    else:
+        risk = "clean"
+        message = "✅ Review timeline looks organic"
+
+    return {
+        "risk": risk,
+        "message": message,
+        "patterns": patterns,
+        "total_analyzed": len(dated_reviews),
+        "date_range": {
+            "earliest": dated_reviews[0]["date"].strftime("%Y-%m-%d") if dated_reviews else None,
+            "latest": dated_reviews[-1]["date"].strftime("%Y-%m-%d") if dated_reviews else None,
+        },
+    }
+
+
+# ============================================================
+# FEATURE 9: Category Price Benchmark
+# ============================================================
+
+def analyze_price_benchmark(current_price: float, alternatives_data: Dict, google_shopping_data: Dict) -> Dict:
+    """
+    Compare product price against category average from Google Shopping results.
+    Uses data already fetched — zero API cost.
+    
+    Returns percentile rank, whether it's a good deal, and price positioning.
+    """
+    if not current_price:
+        return {
+            "verdict": "unknown",
+            "message": "No price available for comparison",
+        }
+
+    # Collect all comparable prices
+    prices = []
+
+    # From Google Shopping results
+    if google_shopping_data and google_shopping_data.get("success"):
+        items = google_shopping_data.get("data", {}).get("items", [])
+        for item in items:
+            p = item.get("price_numeric") or item.get("extracted_price")
+            if p and p > 0:
+                prices.append(p)
+
+    # From alternatives
+    if alternatives_data and isinstance(alternatives_data, dict):
+        for alt in alternatives_data.get("items", alternatives_data.get("alternatives", [])):
+            p = alt.get("price_numeric") or alt.get("price")
+            if isinstance(p, (int, float)) and p > 0:
+                prices.append(p)
+
+    if len(prices) < 3:
+        return {
+            "verdict": "insufficient_data",
+            "message": "Not enough price data for benchmarking",
+            "comparable_products": len(prices),
+        }
+
+    prices_sorted = sorted(prices)
+    avg_price = sum(prices) / len(prices)
+    median_price = prices_sorted[len(prices_sorted) // 2]
+    min_price = prices_sorted[0]
+    max_price = prices_sorted[-1]
+
+    # Calculate percentile (what % of products cost less)
+    cheaper_count = sum(1 for p in prices if p < current_price)
+    percentile = round((cheaper_count / len(prices)) * 100)
+
+    # Price difference from average
+    diff_from_avg = ((current_price - avg_price) / avg_price) * 100
+    diff_from_median = ((current_price - median_price) / median_price) * 100
+
+    # Determine verdict
+    if diff_from_avg <= -20:
+        verdict = "great_deal"
+        emoji = "🟢"
+        message = f"Great deal! {abs(diff_from_avg):.0f}% below category average"
+    elif diff_from_avg <= -5:
+        verdict = "good_price"
+        emoji = "🟢"
+        message = f"Good price — {abs(diff_from_avg):.0f}% below average"
+    elif diff_from_avg <= 10:
+        verdict = "fair_price"
+        emoji = "🟡"
+        message = f"Fair price — near category average"
+    elif diff_from_avg <= 25:
+        verdict = "above_average"
+        emoji = "🟠"
+        message = f"Above average — {diff_from_avg:.0f}% more than similar products"
+    else:
+        verdict = "overpriced"
+        emoji = "🔴"
+        message = f"Overpriced — {diff_from_avg:.0f}% above category average"
+
+    return {
+        "verdict": verdict,
+        "emoji": emoji,
+        "message": message,
+        "current_price": current_price,
+        "category_avg": round(avg_price, 2),
+        "category_median": round(median_price, 2),
+        "category_min": round(min_price, 2),
+        "category_max": round(max_price, 2),
+        "percentile": percentile,
+        "diff_from_avg_pct": round(diff_from_avg, 1),
+        "comparable_products": len(prices),
+    }
+
+
+# ============================================================
+# FEATURE 10: Review Quality Score
+# ============================================================
+
+def analyze_review_quality(reviews: List[Dict]) -> Dict:
+    """
+    Score the overall quality/helpfulness of available reviews.
+    Detailed reviews = high info. One-liners = low info.
+    Uses review text already fetched — zero API cost.
+    """
+    if not reviews:
+        return {
+            "score": 0,
+            "level": "none",
+            "message": "No reviews to analyze",
+            "detailed_count": 0,
+            "one_liner_count": 0,
+            "total": 0,
+        }
+
+    detailed = 0      # >100 words, substantive
+    moderate = 0       # 30-100 words
+    one_liners = 0     # <30 words
+    verified_count = 0
+    total_word_count = 0
+    
+    for r in reviews:
+        body = r.get("body", r.get("review_text", ""))
+        words = len(body.split()) if body else 0
+        total_word_count += words
+        
+        if words >= 100:
+            detailed += 1
+        elif words >= 30:
+            moderate += 1
+        else:
+            one_liners += 1
+            
+        if r.get("verified", r.get("verified_purchase", False)):
+            verified_count += 1
+
+    total = len(reviews)
+    avg_words = total_word_count / total if total > 0 else 0
+    detailed_pct = detailed / total if total > 0 else 0
+    verified_pct = verified_count / total if total > 0 else 0
+
+    # Score: weighted combination
+    # Detailed reviews worth more, verified worth more
+    score = (detailed_pct * 40) + (verified_pct * 30) + (min(avg_words, 200) / 200 * 30)
+    score = round(min(100, max(0, score)))
+
+    if score >= 70:
+        level = "high"
+        message = f"✅ High-quality reviews — {detailed} of {total} are detailed, {verified_pct:.0%} verified"
+    elif score >= 40:
+        level = "medium"
+        message = f"🟡 Mixed quality — {detailed} detailed reviews out of {total}, avg {avg_words:.0f} words"
+    else:
+        level = "low"
+        message = f"⚠️ Low-quality reviews — mostly one-liners ({one_liners}/{total}), avg {avg_words:.0f} words"
+
+    return {
+        "score": score,
+        "level": level,
+        "message": message,
+        "detailed_count": detailed,
+        "moderate_count": moderate,
+        "one_liner_count": one_liners,
+        "total": total,
+        "avg_word_count": round(avg_words),
+        "verified_pct": round(verified_pct * 100),
+    }
+
+
+# ============================================================
+# FEATURE 11: Buy Timing Advisor
+# ============================================================
+
+def analyze_buy_timing(current_price: float, price_prediction: Dict, country: str = "IN") -> Dict:
+    """
+    Combine sale calendar + ARIMA prediction to give specific buy/wait advice.
+    Uses sale calendar already hardcoded in constants.py — zero API cost.
+    """
+    from datetime import datetime, timedelta
+    from .constants import SALE_CALENDAR
+
+    now = datetime.now()
+    advice_parts = []
+    wait_score = 0  # Higher = more reason to wait
+
+    # ── Check upcoming sales ──
+    sales = SALE_CALENDAR.get(country, SALE_CALENDAR.get("IN", []))
+    upcoming = []
+    for sale in sales:
+        # Parse sale month/date range
+        sale_name = sale.get("name", "Sale")
+        sale_months = sale.get("months", [])
+        discount = sale.get("typical_discount", sale.get("discount", "10-30%"))
+        
+        for month in sale_months:
+            # Create approximate sale date (mid-month)
+            try:
+                sale_date = datetime(now.year, month, 15)
+                if sale_date < now - timedelta(days=15):
+                    sale_date = datetime(now.year + 1, month, 15)
+                days_until = (sale_date - now).days
+                if 0 < days_until <= 60:
+                    upcoming.append({
+                        "name": sale_name,
+                        "days_until": days_until,
+                        "discount": discount,
+                    })
+            except ValueError:
+                continue
+
+    upcoming.sort(key=lambda x: x["days_until"])
+
+    if upcoming:
+        nearest = upcoming[0]
+        if nearest["days_until"] <= 7:
+            wait_score += 4
+            advice_parts.append(f"🔥 {nearest['name']} starts in {nearest['days_until']} days! ({nearest['discount']} off expected)")
+        elif nearest["days_until"] <= 14:
+            wait_score += 3
+            advice_parts.append(f"📅 {nearest['name']} is {nearest['days_until']} days away ({nearest['discount']} off)")
+        elif nearest["days_until"] <= 30:
+            wait_score += 2
+            advice_parts.append(f"📅 {nearest['name']} coming in {nearest['days_until']} days ({nearest['discount']} off)")
+
+    # ── Check ARIMA prediction if available ──
+    if price_prediction and current_price:
+        predicted_price = price_prediction.get("predicted_price")
+        pred_confidence = price_prediction.get("confidence", 0)
+
+        if predicted_price and pred_confidence > 0.3:
+            change_pct = ((predicted_price - current_price) / current_price) * 100
+            if change_pct < -10:
+                wait_score += 3
+                advice_parts.append(f"📉 ARIMA predicts {abs(change_pct):.0f}% price drop in 30 days")
+            elif change_pct < -5:
+                wait_score += 2
+                advice_parts.append(f"📉 Price may drop ~{abs(change_pct):.0f}% within a month")
+            elif change_pct > 10:
+                wait_score -= 2
+                advice_parts.append(f"📈 Price trending UP — current price may be a relative low")
+
+    # ── Generate final advice ──
+    if wait_score >= 4:
+        verdict = "WAIT"
+        emoji = "⏳"
+        summary = "Strong reasons to wait — sale or price drop coming"
+    elif wait_score >= 2:
+        verdict = "WAIT_IF_POSSIBLE"
+        emoji = "🤔"
+        summary = "Worth waiting if you're not in a rush"
+    elif wait_score <= -1:
+        verdict = "BUY_NOW"
+        emoji = "🟢"
+        summary = "Good time to buy — price may go up"
+    else:
+        verdict = "NEUTRAL"
+        emoji = "🟡"
+        summary = "No strong signal either way — buy when you need it"
+
+    if not advice_parts:
+        advice_parts.append("No major sales coming up in the next 60 days")
+
+    return {
+        "verdict": verdict,
+        "emoji": emoji,
+        "summary": summary,
+        "details": advice_parts,
+        "upcoming_sales": upcoming[:3],
+        "wait_score": wait_score,
+    }
+
+
+# ============================================================
+# FEATURE 12: Price Drop Alert Generator
+# ============================================================
+
+def generate_price_alerts(asin: str, current_price: float, country: str = "IN") -> Dict:
+    """
+    Generate ready-to-use price tracking links for the buyer.
+    Zero API cost — just generates URLs.
+    """
+    domain = "amazon.in" if country == "IN" else "amazon.com"
+    currency = "INR" if country == "IN" else "USD"
+    
+    alerts = []
+    
+    # Target prices (10%, 20%, 30% drops)
+    targets = []
+    if current_price:
+        for pct in [10, 20, 30]:
+            target = round(current_price * (1 - pct/100))
+            targets.append({"drop_pct": pct, "target_price": target})
+    
+    # ── CamelCamelCamel (free, no account needed) ──
+    camel_domain = "in" if country == "IN" else "com"
+    alerts.append({
+        "service": "CamelCamelCamel",
+        "url": f"https://camelcamelcamel.com/product/{asin}",
+        "description": "Free price history + email alerts",
+        "setup": "Add email, set target price, get notified",
+        "cost": "Free",
+    })
+    
+    # ── Keepa (browser extension) ──
+    alerts.append({
+        "service": "Keepa",
+        "url": f"https://keepa.com/#!product/{'8' if country == 'IN' else '1'}-{asin}",
+        "description": "Detailed price history charts + alerts",
+        "setup": "Install browser extension for inline Amazon charts",
+        "cost": "Free (basic) / €15/mo (API)",
+    })
+    
+    # ── Amazon native wishlist trick ──
+    alerts.append({
+        "service": "Amazon Wishlist",
+        "url": f"https://www.{domain}/dp/{asin}",
+        "description": "Add to wishlist → Amazon emails you on price drops",
+        "setup": "Click 'Add to Wish List' on the product page",
+        "cost": "Free",
+    })
+    
+    return {
+        "alerts": alerts,
+        "targets": targets,
+        "asin": asin,
+        "current_price": current_price,
+        "message": f"Set alerts for price drops — target ₹{targets[0]['target_price']:,} (-10%)" if targets and country == "IN"
+                   else f"Set alerts for price drops — target ${targets[0]['target_price']:,} (-10%)" if targets
+                   else "Set up price drop alerts for this product",
+    }
+
+
 def analyze_regret_pattern(reviews: List[Dict]) -> Dict:
     """Detect if ratings drop over time (regret indicator)."""
     if not reviews:
