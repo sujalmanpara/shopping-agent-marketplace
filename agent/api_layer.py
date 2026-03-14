@@ -153,7 +153,27 @@ async def fetch_amazon_product(asin: str, country: str = "IN", keys: dict = None
         except Exception:
             pass  # Fall through
 
-    # ── Tier 3: HTTP fallback (works on residential IPs) ──
+    # ── Tier 3: Stealth browser fallback (Camoufox/Playwright on port 9222) ──
+    camoufox_token = (keys or {}).get("CAMOUFOX_TOKEN", "")
+    camoufox_port = int((keys or {}).get("CAMOUFOX_PORT", "9222"))
+    if not camoufox_token:
+        # Try reading from the default token file
+        try:
+            with open("/data/browser-server-token", "r") as f:
+                camoufox_token = f.read().strip()
+        except Exception:
+            pass
+    if camoufox_token:
+        try:
+            result = await _fetch_amazon_camoufox(asin, camoufox_token, camoufox_port, country)
+            if result:
+                latency = (time.time() - start) * 1000
+                _cache_set(cache_key, result, ttl_seconds=3600)
+                return _success("amazon_camoufox", result, latency)
+        except Exception:
+            pass  # Fall through
+
+    # ── Tier 4: HTTP fallback (works on residential IPs) ──
     # Fallback: HTTP fetch with realistic headers
     try:
         domain = "amazon.in" if country == "IN" else "amazon.com"
@@ -333,6 +353,123 @@ async def _fetch_amazon_scrapingdog(asin: str, api_key: str, country: str = "IN"
             "country": country,
             "brand": data.get("brand", ""),
         }
+
+async def _fetch_amazon_camoufox(asin: str, token: str, port: int = 9222, country: str = "IN") -> Optional[Dict]:
+    """
+    Fetch Amazon product data via Camoufox stealth browser (local server on port 9222).
+    Bypasses CAPTCHAs and bot detection. Zero external API cost.
+    Requires Camoufox browser server running locally.
+    """
+    domain = "amazon.in" if country == "IN" else "amazon.com"
+    product_url = f"https://www.{domain}/dp/{asin}"
+    base = f"http://localhost:{port}?token={token}"
+
+    # JavaScript to extract product data (IIFE, no arrow functions — Camoufox compat)
+    js_extract = """(function() {
+        var data = {
+            title: (document.querySelector('#productTitle') || {}).textContent || '',
+            price_whole: (document.querySelector('.a-price-whole') || {}).textContent || '',
+            price_fraction: (document.querySelector('.a-price-fraction') || {}).textContent || '',
+            rating: '',
+            review_count: (document.querySelector('#acrCustomerReviewText') || {}).textContent || '',
+            brand: (document.querySelector('#bylineInfo') || {}).textContent || '',
+            main_image: (document.querySelector('#landingImage') || {}).src || ''
+        };
+        var ratingEl = document.querySelector('#acrPopover span.a-size-base');
+        if (ratingEl) data.rating = ratingEl.textContent.trim();
+        var featureEls = document.querySelectorAll('#feature-bullets li span');
+        data.features = [];
+        for (var i = 0; i < featureEls.length; i++) {
+            var t = featureEls[i].textContent.trim();
+            if (t.length > 5) data.features.push(t);
+        }
+        data.title = data.title.trim();
+        data.price_whole = data.price_whole.trim();
+        data.price_fraction = data.price_fraction.trim();
+        data.review_count = data.review_count.trim();
+        data.brand = data.brand.trim();
+        return JSON.stringify(data);
+    })()"""
+
+    async with httpx.AsyncClient(timeout=45) as client:
+        # Single POST: navigate + wait + evaluate
+        payload = {
+            "url": product_url,
+            "actions": [
+                {"type": "wait", "ms": 2000},
+                {"type": "evaluate", "script": js_extract},
+            ],
+            "screenshot": False,
+            "timeout": 30000,
+        }
+        resp = await client.post(base, json=payload)
+        if resp.status_code != 200:
+            return None
+
+        resp_data = resp.json()
+        if not resp_data.get("success", False):
+            return None
+
+        page_title = resp_data.get("title", "")
+        if "Robot Check" in page_title or "CAPTCHA" in page_title:
+            return None
+
+        results = resp_data.get("results", [])
+        if not results or not results[0]:
+            return None
+
+        try:
+            data = json.loads(results[0])
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+        title = data.get("title", "")
+        if not title:
+            return None
+
+        # Parse price
+        price = None
+        price_whole = data.get("price_whole", "").replace(",", "").replace(".", "").strip()
+        price_fraction = data.get("price_fraction", "00").strip()
+        if price_whole:
+            try:
+                price = float(f"{price_whole}.{price_fraction}")
+            except ValueError:
+                pass
+
+        # Parse rating
+        rating = None
+        rating_str = data.get("rating", "")
+        if rating_str:
+            try:
+                rating = float(rating_str.split()[0])
+            except (ValueError, IndexError):
+                pass
+
+        # Parse review count
+        review_count = 0
+        rc_str = data.get("review_count", "")
+        if rc_str:
+            rc_digits = re.sub(r'[^\d]', '', rc_str)
+            if rc_digits:
+                review_count = int(rc_digits)
+
+        return {
+            "title": title,
+            "price": price,
+            "price_display": f"₹{price:,.0f}" if price and country == "IN" else f"${price:,.2f}" if price else "N/A",
+            "rating": rating,
+            "review_count": review_count,
+            "reviews": [],  # Browser mode doesn't scrape individual reviews
+            "asin": asin,
+            "url": product_url,
+            "source_method": "camoufox_browser",
+            "country": country,
+            "brand": data.get("brand", "").replace("Visit the ", "").replace(" Store", ""),
+            "main_image": data.get("main_image", ""),
+            "features": data.get("features", []),
+        }
+
 
 # ============================================================
 # SOURCE 2: Reddit (via PRAW or Pushshift)
