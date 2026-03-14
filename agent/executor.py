@@ -1,14 +1,22 @@
-# executor.py — Shopping Truth Agent executor with API-first architecture
+# executor.py — Shopping Truth Agent executor (standalone, no framework deps)
 # Phase 1: Clean API layer, graceful degradation, structured output
 # Phase 2: Alternatives, enhanced fake reviews, price prediction with context
 
 import asyncio
 from typing import AsyncGenerator, Dict
-from app.core.sse import sse_event, sse_error
-from app.core.config import settings
+
+
+def sse_event(event_type: str, data: str) -> dict:
+    """Standalone SSE event helper — no framework dependency."""
+    return {"event": event_type, "data": data}
+
+
+def sse_error(message: str) -> dict:
+    """Standalone SSE error helper."""
+    return {"event": "error", "data": message}
 
 from .api_layer import (
-    extract_asin, extract_flipkart_id, detect_platform,
+    extract_asin, detect_platform,
     fetch_amazon_product, fetch_all_sources, fetch_alternatives
 )
 from .analyzers import (
@@ -47,12 +55,7 @@ async def execute(
     # ── Step 1: Parse input ──
     platform = detect_platform(prompt)
     asin = extract_asin(prompt)
-    flipkart_id = extract_flipkart_id(prompt)
-
     if not asin:
-        if flipkart_id:
-            yield sse_error("Flipkart support coming soon. Please provide an Amazon product URL for now.")
-            return
         yield sse_error("Please provide a valid Amazon product URL or ASIN")
         return
 
@@ -72,8 +75,8 @@ async def execute(
         brand = product_name.split()[0] if product_name else ""
         price_numeric = amazon_data.get("price")
     else:
-        # Graceful degradation: even if Amazon fails, try other sources
-        product_name = prompt.replace("https://", "").replace("http://", "").replace("amazon.in", "").replace("amazon.com", "")
+        # Graceful degradation: even if Amazon fails, try other sources with ASIN as query
+        product_name = f"Amazon product {asin}"
         brand = ""
         price_numeric = None
         amazon_data = {

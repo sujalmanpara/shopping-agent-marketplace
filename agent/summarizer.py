@@ -5,8 +5,34 @@
 import json
 from typing import Dict, List
 import httpx
-from app.core.llm import call_llm
 from .constants import LLM_TEMPERATURE, LLM_MAX_TOKENS, MAX_CONTEXT_LENGTH
+
+
+async def call_llm(api_key: str, system: str, user: str, temperature: float = 0.0, max_tokens: int = 500) -> str:
+    """Direct OpenAI API call — no framework dependency."""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": "gpt-4o-mini",
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json=payload,
+        )
+        if resp.status_code != 200:
+            return f"LLM error: HTTP {resp.status_code}"
+        data = resp.json()
+        return data["choices"][0]["message"]["content"].strip()
 
 
 async def generate_summary(
