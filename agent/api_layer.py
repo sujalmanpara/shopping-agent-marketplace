@@ -128,22 +128,32 @@ async def fetch_amazon_product(asin: str, country: str = "IN", keys: dict = None
         return _success("amazon", cached, 0)
     
     start = time.time()
-    
-    # Try PA-API first if keys available
-    pa_access_key = (keys or {}).get("AMAZON_ACCESS_KEY")
-    pa_secret_key = (keys or {}).get("AMAZON_SECRET_KEY")
-    pa_partner_tag = (keys or {}).get("AMAZON_PARTNER_TAG")
-    
-    if pa_access_key and pa_secret_key and pa_partner_tag:
+
+    # ── Tier 1: Rainforest API (most trusted, enterprise-grade) ──
+    rainforest_key = (keys or {}).get("RAINFOREST_API_KEY")
+    if rainforest_key:
         try:
-            result = await _fetch_amazon_paapi(asin, pa_access_key, pa_secret_key, pa_partner_tag, country)
+            result = await _fetch_amazon_rainforest(asin, rainforest_key, country)
             if result:
                 latency = (time.time() - start) * 1000
                 _cache_set(cache_key, result, ttl_seconds=3600)
-                return _success("amazon_paapi", result, latency)
+                return _success("amazon_rainforest", result, latency)
         except Exception:
-            pass  # Fall through to HTTP fallback
-    
+            pass  # Fall through
+
+    # ── Tier 2: ScrapingDog API (reliable, free tier 1000/mo) ──
+    scrapingdog_key = (keys or {}).get("SCRAPINGDOG_API_KEY")
+    if scrapingdog_key:
+        try:
+            result = await _fetch_amazon_scrapingdog(asin, scrapingdog_key, country)
+            if result:
+                latency = (time.time() - start) * 1000
+                _cache_set(cache_key, result, ttl_seconds=3600)
+                return _success("amazon_scrapingdog", result, latency)
+        except Exception:
+            pass  # Fall through
+
+    # ── Tier 3: HTTP fallback (works on residential IPs) ──
     # Fallback: HTTP fetch with realistic headers
     try:
         domain = "amazon.in" if country == "IN" else "amazon.com"
@@ -208,18 +218,121 @@ async def fetch_amazon_product(asin: str, country: str = "IN", keys: dict = None
         return _failure("amazon", str(e), latency)
 
 
-async def _fetch_amazon_paapi(asin: str, access_key: str, secret_key: str, partner_tag: str, country: str) -> Optional[Dict]:
+async def _fetch_amazon_rainforest(asin: str, api_key: str, country: str = "IN") -> Optional[Dict]:
     """
-    Fetch from Amazon Product Advertising API 5.0.
-    
-    Requires paapi5-python-sdk or manual AWS v4 signature.
-    When the SDK is installed and credentials are valid, this will return
-    structured product data. Currently returns None to fall through to HTTP.
+    Fetch Amazon product data via Rainforest API (trajectdata.com).
+    Enterprise-grade, built specifically for Amazon. Recommended for production.
+    Signup: https://www.rainforestapi.com/ — plans from ~$100/mo
     """
-    # PA-API requires AWS Signature V4 signing which needs the full SDK.
-    # When ready, install paapi5-python-sdk and implement here.
-    # The HTTP fallback handles product data in the meantime.
-    return None
+    domain = "amazon.in" if country == "IN" else "amazon.com"
+    url = "https://api.rainforestapi.com/request"
+    params = {
+        "api_key": api_key,
+        "type": "product",
+        "asin": asin,
+        "amazon_domain": domain,
+        "include_summarization_attributes": "true",
+    }
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(url, params=params)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        if not data.get("request_info", {}).get("success", False):
+            return None
+        p = data.get("product", {})
+        if not p:
+            return None
+
+        # Extract price from buybox
+        price = None
+        buybox = p.get("buybox_winner", {})
+        if buybox:
+            price_obj = buybox.get("price", {})
+            price = price_obj.get("value")
+
+        # Extract reviews
+        reviews = []
+        for r in p.get("top_reviews", []):
+            reviews.append({
+                "body": r.get("body", ""),
+                "rating": r.get("rating", 0),
+                "date": r.get("date", {}).get("utc", ""),
+                "title": r.get("title", ""),
+                "verified": r.get("verified_purchase", False),
+            })
+
+        return {
+            "title": p.get("title", ""),
+            "price": price,
+            "price_display": f"₹{price:,.0f}" if price and country == "IN" else f"${price:,.2f}" if price else "N/A",
+            "rating": p.get("rating"),
+            "review_count": p.get("ratings_total", 0),
+            "reviews": reviews,
+            "asin": asin,
+            "url": p.get("link", f"https://www.{domain}/dp/{asin}"),
+            "source_method": "rainforest_api",
+            "country": country,
+            "brand": p.get("brand", ""),
+            "main_image": p.get("main_image", {}).get("link", ""),
+        }
+
+
+async def _fetch_amazon_scrapingdog(asin: str, api_key: str, country: str = "IN") -> Optional[Dict]:
+    """
+    Fetch Amazon product data via ScrapingDog API.
+    Free tier: 1,000 requests/month. Paid from $30/month.
+    Signup: https://www.scrapingdog.com/amazon-scraper
+    """
+    domain = "amazon.in" if country == "IN" else "amazon.com"
+    url = "https://api.scrapingdog.com/amazon/product"
+    params = {
+        "api_key": api_key,
+        "asin": asin,
+        "domain": domain,
+    }
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(url, params=params)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        if not data.get("success", True) == False and "title" not in data:
+            return None
+
+        # Extract price
+        price = None
+        price_raw = data.get("price") or data.get("current_price")
+        if price_raw:
+            price_str = str(price_raw).replace("₹", "").replace("$", "").replace(",", "").strip()
+            try:
+                price = float(price_str)
+            except ValueError:
+                pass
+
+        # Extract reviews
+        reviews = []
+        for r in data.get("reviews", []):
+            reviews.append({
+                "body": r.get("review_text", r.get("body", "")),
+                "rating": float(r.get("rating", 0)),
+                "date": r.get("date", ""),
+                "title": r.get("review_title", r.get("title", "")),
+                "verified": r.get("verified_purchase", False),
+            })
+
+        return {
+            "title": data.get("title", data.get("product_title", "")),
+            "price": price,
+            "price_display": f"₹{price:,.0f}" if price and country == "IN" else f"${price:,.2f}" if price else "N/A",
+            "rating": data.get("rating", data.get("stars")),
+            "review_count": data.get("total_reviews", data.get("review_count", 0)),
+            "reviews": reviews,
+            "asin": asin,
+            "url": f"https://www.{domain}/dp/{asin}",
+            "source_method": "scrapingdog_api",
+            "country": country,
+            "brand": data.get("brand", ""),
+        }
 
 # ============================================================
 # SOURCE 2: Reddit (via PRAW or Pushshift)
