@@ -847,24 +847,40 @@ def analyze_buy_timing(current_price: float, price_prediction: Dict, country: st
     sales = SALE_CALENDAR.get(country, SALE_CALENDAR.get("IN", []))
     upcoming = []
     for sale in sales:
-        # Parse sale month/date range
         sale_name = sale.get("name", "Sale")
-        sale_months = sale.get("months", [])
         discount = sale.get("typical_discount", sale.get("discount", "10-30%"))
-        
-        for month in sale_months:
-            # Create approximate sale date (mid-month)
+        windows = sale.get("windows", [])
+
+        for window in windows:
+            month, start_day, end_day = window
             try:
-                sale_date = datetime(now.year, month, 15)
-                if sale_date < now - timedelta(days=15):
-                    sale_date = datetime(now.year + 1, month, 15)
-                days_until = (sale_date - now).days
+                sale_start = datetime(now.year, month, start_day)
+                sale_end = datetime(now.year, month, end_day)
+                # If sale already ended this year, check next year
+                if sale_end < now:
+                    sale_start = datetime(now.year + 1, month, start_day)
+                    sale_end = datetime(now.year + 1, month, end_day)
+                
+                # If sale is currently active
+                if sale_start <= now <= sale_end:
+                    upcoming.append({
+                        "name": sale_name,
+                        "days_until": 0,
+                        "discount": discount,
+                        "active": True,
+                    })
+                    break
+                
+                # If sale is upcoming
+                days_until = (sale_start - now).days
                 if 0 < days_until <= 60:
                     upcoming.append({
                         "name": sale_name,
                         "days_until": days_until,
                         "discount": discount,
+                        "active": False,
                     })
+                    break  # Only count nearest window per sale
             except ValueError:
                 continue
 
@@ -872,7 +888,10 @@ def analyze_buy_timing(current_price: float, price_prediction: Dict, country: st
 
     if upcoming:
         nearest = upcoming[0]
-        if nearest["days_until"] <= 7:
+        if nearest.get("active"):
+            wait_score -= 3  # Sale is NOW — buy!
+            advice_parts.append(f"🔥 {nearest['name']} is LIVE right now! ({nearest['discount']} off)")
+        elif nearest["days_until"] <= 7:
             wait_score += 4
             advice_parts.append(f"🔥 {nearest['name']} starts in {nearest['days_until']} days! ({nearest['discount']} off expected)")
         elif nearest["days_until"] <= 14:

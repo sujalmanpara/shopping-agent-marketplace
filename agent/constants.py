@@ -59,23 +59,27 @@ SERPAPI_URL = "https://serpapi.com/search.json"
 COUPON_API_BASE = "https://api.couponapi.org/v1"
 
 # Sale Calendar for India and US
+# Sale calendar with actual date windows (start_day, end_day per month)
+# For festivals with variable dates, use the typical Amazon sale window
 SALE_CALENDAR = {
     "IN": [
-        {"name": "Amazon Great Indian Festival", "months": [10], "typical_discount": "30-60%"},
-        {"name": "Amazon Prime Day", "months": [7], "typical_discount": "20-50%"},
-        {"name": "Flipkart Big Billion Days", "months": [10], "typical_discount": "30-60%"},
-        {"name": "Republic Day Sale", "months": [1], "typical_discount": "20-40%"},
-        {"name": "Diwali Sale", "months": [10, 11], "typical_discount": "20-50%"},
-        {"name": "Holi Sale", "months": [3], "typical_discount": "10-30%"},
-        {"name": "Independence Day Sale", "months": [8], "typical_discount": "15-35%"},
-        {"name": "Year End Sale", "months": [12], "typical_discount": "20-40%"},
+        {"name": "Republic Day Sale", "windows": [(1, 20, 27)], "typical_discount": "20-40%"},
+        {"name": "Holi Sale", "windows": [(3, 1, 10)], "typical_discount": "10-30%"},
+        {"name": "Summer Sale", "windows": [(5, 1, 10)], "typical_discount": "15-30%"},
+        {"name": "Amazon Prime Day", "windows": [(7, 15, 31)], "typical_discount": "20-50%"},
+        {"name": "Independence Day Sale", "windows": [(8, 5, 15)], "typical_discount": "15-35%"},
+        {"name": "Amazon Great Indian Festival", "windows": [(9, 25, 30), (10, 1, 15)], "typical_discount": "30-60%"},
+        {"name": "Flipkart Big Billion Days", "windows": [(9, 25, 30), (10, 1, 10)], "typical_discount": "30-60%"},
+        {"name": "Diwali Sale", "windows": [(10, 15, 31)], "typical_discount": "20-50%"},
+        {"name": "Year End Sale", "windows": [(12, 20, 31)], "typical_discount": "20-40%"},
     ],
     "US": [
-        {"name": "Black Friday", "months": [11], "typical_discount": "30-60%"},
-        {"name": "Cyber Monday", "months": [11, 12], "typical_discount": "20-50%"},
-        {"name": "Amazon Prime Day", "months": [7], "typical_discount": "20-50%"},
-        {"name": "Labor Day Sale", "months": [9], "typical_discount": "15-30%"},
-        {"name": "Memorial Day Sale", "months": [5], "typical_discount": "15-30%"},
-        {"name": "Back to School", "months": [8], "typical_discount": "10-25%"},
+        {"name": "Presidents' Day Sale", "windows": [(2, 14, 21)], "typical_discount": "15-30%"},
+        {"name": "Memorial Day Sale", "windows": [(5, 22, 31)], "typical_discount": "15-30%"},
+        {"name": "Amazon Prime Day", "windows": [(7, 10, 18)], "typical_discount": "20-50%"},
+        {"name": "Back to School", "windows": [(8, 1, 15)], "typical_discount": "10-25%"},
+        {"name": "Labor Day Sale", "windows": [(8, 28, 31), (9, 1, 5)], "typical_discount": "15-30%"},
+        {"name": "Black Friday", "windows": [(11, 22, 30)], "typical_discount": "30-60%"},
+        {"name": "Cyber Monday", "windows": [(11, 28, 30), (12, 1, 3)], "typical_discount": "20-50%"},
     ],
 }
