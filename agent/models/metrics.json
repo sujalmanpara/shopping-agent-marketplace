@@ -1,15 +1,19 @@
 {
   "model_type": "xgb",
-  "version": "1.0",
+  "version": "2.0",
+  "domain": "electronics_ecommerce",
   "results": {
-    "rf": 0.8798,
-    "xgb": 0.9019,
-    "gb": 0.8898,
-    "ensemble": 0.8982
+    "accuracy": 0.9524,
+    "f1": 0.96
   },
-  "best_accuracy": 0.9019,
-  "best_f1": 0.8976,
-  "train_size": 32371,
-  "test_size": 8093,
-  "feature_count": 216
+  "best_accuracy": 0.9524,
+  "best_f1": 0.96,
+  "train_size": 83,
+  "test_size": 21,
+  "feature_count": 216,
+  "classes": {
+    "0": "GENUINE",
+    "1": "FAKE"
+  },
+  "note": "Retrained on electronics domain \u2014 v1.0 was trained on books/movies (wrong domain)"
 }

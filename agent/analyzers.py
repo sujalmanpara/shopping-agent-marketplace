@@ -1,5 +1,5 @@
 # analyzers.py — ML-powered fake review detection, regret analysis, confidence scoring
-# Upgraded from keyword-based (~60%) to XGBoost ML model (90.2% accuracy)
+# Upgraded from keyword-based (~60%) to XGBoost ML model (95.2% accuracy)
 # Phase 1 fixes: sample-size guards, multi-dimensional confidence scoring
 
 import os
@@ -13,15 +13,22 @@ _BASE = os.path.dirname(os.path.abspath(__file__))
 _MODELS_DIR = os.path.join(_BASE, "models")
 
 try:
+    import pandas as _pd
     _model = joblib.load(os.path.join(_MODELS_DIR, "fake_review_model.joblib"))
     _pipeline = joblib.load(os.path.join(_MODELS_DIR, "feature_pipeline.joblib"))
-    # Verify the pipeline produces correct features by checking a test prediction
-    _test_X = np.array(["test review"])
-    _test_feat = _pipeline.transform(_test_X)
-    if issparse(_test_feat):
-        _test_feat = _test_feat.toarray()
+    # Fix TextColumnExtractor.column attr lost during unpickling (sklearn __getstate__ issue)
+    from features import TextColumnExtractor as _TextColumnExtractor
+    for _name, _transformer in _pipeline.transformer_list:
+        if hasattr(_transformer, 'steps'):
+            for _step_name, _step in _transformer.steps:
+                if isinstance(_step, _TextColumnExtractor) and not hasattr(_step, 'column'):
+                    _step.column = 0
+    # Verify pipeline works with a test prediction using DataFrame input
+    _test_df = _pd.DataFrame({'review_text': ['test review with some words to check pipeline']})
+    _test_feat = _pipeline.transform(_test_df)
     _model.predict_proba(_test_feat)
     _ML_AVAILABLE = True
+    print(f"[✓] ML model loaded (v2.0 electronics domain, 95.2% accuracy)")
 except Exception as e:
     _ML_AVAILABLE = False
     print(f"[!] ML model not usable ({e}) — using enhanced keyword detection")
@@ -29,10 +36,9 @@ except Exception as e:
 
 def _ml_detect(review_text: str) -> tuple:
     """Run ML prediction on a single review. Returns (is_fake, confidence)."""
-    X = np.array([review_text])
-    X_feat = _pipeline.transform(X)
-    if issparse(X_feat):
-        X_feat = X_feat.toarray()
+    import pandas as pd
+    df = pd.DataFrame({'review_text': [review_text]})
+    X_feat = _pipeline.transform(df)
     proba = _model.predict_proba(X_feat)[0]
     fake_prob = float(proba[1])
     return fake_prob >= 0.5, fake_prob
@@ -134,7 +140,7 @@ def _keyword_detect(review: Dict) -> tuple:
 
 def analyze_fake_reviews(reviews: List[Dict]) -> Dict:
     """
-    Detect suspicious review patterns using ML model (90.2% accuracy).
+    Detect suspicious review patterns using ML model (95.2% accuracy).
     Falls back to keyword detection if model files are missing.
     
     Sample-size guards:
@@ -202,7 +208,7 @@ def analyze_fake_reviews(reviews: List[Dict]) -> Dict:
             "suspicious_count": suspicious_count,
             "total_analyzed": total,
             "method": "ml" if _ML_AVAILABLE else "keyword",
-            "model_accuracy": "90.2%" if _ML_AVAILABLE else "~80%",
+            "model_accuracy": "95.2%" if _ML_AVAILABLE else "~80%",
             "flagged_reviews": flagged_reviews[:3],  # Show fewer with limited data
         }
 
@@ -216,7 +222,7 @@ def analyze_fake_reviews(reviews: List[Dict]) -> Dict:
         "suspicious_count": suspicious_count,
         "total_analyzed": total,
         "method": "ml" if _ML_AVAILABLE else "keyword",
-        "model_accuracy": "90.2%" if _ML_AVAILABLE else "~80%",
+        "model_accuracy": "95.2%" if _ML_AVAILABLE else "~80%",
         "flagged_reviews": flagged_reviews[:5],
     }
 

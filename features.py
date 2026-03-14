@@ -87,14 +87,18 @@ class LinguisticFeatureExtractor(BaseEstimator, TransformerMixin):
         return self
     
     def transform(self, X):
+        from scipy.sparse import csr_matrix
         if isinstance(X, np.ndarray):
             X = X.ravel()
+        elif hasattr(X, 'iloc'):
+            # DataFrame input — extract the text column
+            X = X.iloc[:, 0] if X.ndim > 1 else X.iloc[:, 0]
         features = []
         for text in X:
             text = str(text) if text else ""
             features.append(self._extract(text))
-        result = pd.DataFrame(features, columns=self.FEATURE_NAMES)
-        return result
+        result = np.array(features, dtype=np.float64)
+        return csr_matrix(result)
     
     def _extract(self, text):
         """Extract 16 linguistic features."""
