@@ -51,3 +51,5 @@ cache.db
 agent/cache.db
 __pycache__/
 *.pyc
+.env
+agent/cache.db
