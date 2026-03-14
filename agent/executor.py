@@ -47,9 +47,15 @@ async def execute(
     7. Generate LLM verdict (with alternatives + prediction data)
     8. Format two-tier output (TL;DR + full analysis)
     """
-    api_key = keys.get("OPENAI_API_KEY")
+    # Auto-detect LLM provider from available keys
+    llm_keys = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GROK_API_KEY", "OPENROUTER_API_KEY"]
+    api_key = None
+    for k in llm_keys:
+        if keys.get(k):
+            api_key = keys[k]
+            break
     if not api_key:
-        yield sse_error("Missing OPENAI_API_KEY")
+        yield sse_error("No LLM API key found. Set one of: OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, GROK_API_KEY, or OPENROUTER_API_KEY")
         return
 
     # ── Step 1: Parse input ──
@@ -191,6 +197,7 @@ async def execute(
         alternatives=alternatives_data,
         price_prediction=price_prediction,
         fake_review_summary=fake_review_summary,
+        keys=keys,
     )
 
     # ── Step 8: Format Output ──

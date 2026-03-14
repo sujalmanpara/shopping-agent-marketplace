@@ -8,14 +8,104 @@ import httpx
 from .constants import LLM_TEMPERATURE, LLM_MAX_TOKENS, MAX_CONTEXT_LENGTH
 
 
-async def call_llm(api_key: str, system: str, user: str, temperature: float = 0.0, max_tokens: int = 500) -> str:
-    """Direct OpenAI API call — no framework dependency."""
+# ============================================================
+# MULTI-PROVIDER LLM — OpenAI, Anthropic, Gemini, Grok, OpenRouter
+# ============================================================
+
+# Provider configs: (base_url, model, auth_header_format, response_path)
+LLM_PROVIDERS = {
+    "openai": {
+        "base_url": "https://api.openai.com/v1/chat/completions",
+        "model": "gpt-4o-mini",
+        "env_key": "OPENAI_API_KEY",
+    },
+    "anthropic": {
+        "base_url": "https://api.anthropic.com/v1/messages",
+        "model": "claude-sonnet-4-20250514",
+        "env_key": "ANTHROPIC_API_KEY",
+    },
+    "gemini": {
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        "model": "gemini-2.0-flash",
+        "env_key": "GEMINI_API_KEY",
+    },
+    "grok": {
+        "base_url": "https://api.x.ai/v1/chat/completions",
+        "model": "grok-3-mini-fast",
+        "env_key": "GROK_API_KEY",
+    },
+    "openrouter": {
+        "base_url": "https://openrouter.ai/api/v1/chat/completions",
+        "model": "google/gemini-2.0-flash-exp:free",
+        "env_key": "OPENROUTER_API_KEY",
+    },
+}
+
+
+def _detect_provider(keys: dict) -> tuple:
+    """Auto-detect which LLM provider to use based on available keys.
+    Returns (provider_name, api_key).
+    Priority: explicit LLM_PROVIDER env var → first available key.
+    """
+    import os
+    explicit = os.getenv("LLM_PROVIDER", "").lower()
+    if explicit and explicit in LLM_PROVIDERS:
+        cfg = LLM_PROVIDERS[explicit]
+        key = keys.get(cfg["env_key"]) or os.getenv(cfg["env_key"], "")
+        if key:
+            return explicit, key
+
+    # Auto-detect: try in priority order
+    priority = ["openai", "anthropic", "gemini", "grok", "openrouter"]
+    for provider in priority:
+        cfg = LLM_PROVIDERS[provider]
+        key = keys.get(cfg["env_key"]) or os.getenv(cfg["env_key"], "")
+        if key:
+            return provider, key
+
+    return "openai", ""
+
+
+async def call_llm(api_key: str, system: str, user: str, temperature: float = 0.0, max_tokens: int = 500, keys: dict = None) -> str:
+    """
+    Multi-provider LLM call. Supports:
+      - OpenAI (GPT-4o-mini)
+      - Anthropic (Claude Sonnet)
+      - Google Gemini (2.0 Flash)
+      - xAI Grok (Grok-3-mini-fast)
+      - OpenRouter (any model, free tier available)
+
+    Auto-detects provider from available API keys.
+    Set LLM_PROVIDER env var to force a specific provider.
+    """
+    provider, detected_key = _detect_provider(keys or {})
+    key = api_key or detected_key
+
+    if not key:
+        return "Error: No LLM API key configured. Set one of: OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, GROK_API_KEY, OPENROUTER_API_KEY"
+
+    cfg = LLM_PROVIDERS[provider]
+
+    try:
+        if provider == "anthropic":
+            return await _call_anthropic(key, cfg["model"], system, user, temperature, max_tokens)
+        elif provider == "gemini":
+            return await _call_gemini(key, cfg["model"], system, user, temperature, max_tokens)
+        else:
+            # OpenAI-compatible: openai, grok, openrouter
+            return await _call_openai_compatible(key, cfg["base_url"], cfg["model"], system, user, temperature, max_tokens)
+    except Exception as e:
+        return f"LLM error ({provider}): {str(e)}"
+
+
+async def _call_openai_compatible(api_key: str, base_url: str, model: str, system: str, user: str, temperature: float, max_tokens: int) -> str:
+    """OpenAI-compatible API (works for OpenAI, Grok, OpenRouter)."""
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     payload = {
-        "model": "gpt-4o-mini",
+        "model": model,
         "temperature": temperature,
         "max_tokens": max_tokens,
         "messages": [
@@ -24,15 +114,54 @@ async def call_llm(api_key: str, system: str, user: str, temperature: float = 0.
         ],
     }
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload,
-        )
+        resp = await client.post(base_url, headers=headers, json=payload)
         if resp.status_code != 200:
-            return f"LLM error: HTTP {resp.status_code}"
+            return f"LLM error: HTTP {resp.status_code} — {resp.text[:200]}"
         data = resp.json()
         return data["choices"][0]["message"]["content"].strip()
+
+
+async def _call_anthropic(api_key: str, model: str, system: str, user: str, temperature: float, max_tokens: int) -> str:
+    """Anthropic Messages API."""
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "system": system,
+        "messages": [
+            {"role": "user", "content": user},
+        ],
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload)
+        if resp.status_code != 200:
+            return f"LLM error (Anthropic): HTTP {resp.status_code} — {resp.text[:200]}"
+        data = resp.json()
+        return data["content"][0]["text"].strip()
+
+
+async def _call_gemini(api_key: str, model: str, system: str, user: str, temperature: float, max_tokens: int) -> str:
+    """Google Gemini API."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    payload = {
+        "system_instruction": {"parts": [{"text": system}]},
+        "contents": [{"parts": [{"text": user}]}],
+        "generationConfig": {
+            "temperature": temperature,
+            "maxOutputTokens": max_tokens,
+        },
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(url, json=payload)
+        if resp.status_code != 200:
+            return f"LLM error (Gemini): HTTP {resp.status_code} — {resp.text[:200]}"
+        data = resp.json()
+        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
 
 async def generate_summary(
@@ -45,6 +174,7 @@ async def generate_summary(
     alternatives: Dict = None,
     price_prediction: Dict = None,
     fake_review_summary: Dict = None,
+    keys: dict = None,
 ) -> str:
     """
     Generate final shopping advice using LLM with structured JSON input.
@@ -202,6 +332,7 @@ Focus on:
         user=f"Analyze this product data and give your verdict:\n\n{context_str}",
         temperature=LLM_TEMPERATURE,
         max_tokens=LLM_MAX_TOKENS,
+        keys=keys,
     )
 
     return summary

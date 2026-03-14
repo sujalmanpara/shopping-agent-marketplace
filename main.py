@@ -34,7 +34,13 @@ except ImportError:
 # ── Load API keys from environment ──
 def load_keys() -> dict:
     return {
+        # LLM (pick one — auto-detected in priority order)
         "OPENAI_API_KEY":      os.getenv("OPENAI_API_KEY", ""),
+        "ANTHROPIC_API_KEY":   os.getenv("ANTHROPIC_API_KEY", ""),
+        "GEMINI_API_KEY":      os.getenv("GEMINI_API_KEY", ""),
+        "GROK_API_KEY":        os.getenv("GROK_API_KEY", ""),
+        "OPENROUTER_API_KEY":  os.getenv("OPENROUTER_API_KEY", ""),
+        # Data sources
         "YOUTUBE_API_KEY":     os.getenv("YOUTUBE_API_KEY", ""),
         "RAINFOREST_API_KEY":  os.getenv("RAINFOREST_API_KEY", ""),
         "SCRAPINGDOG_API_KEY": os.getenv("SCRAPINGDOG_API_KEY", ""),
