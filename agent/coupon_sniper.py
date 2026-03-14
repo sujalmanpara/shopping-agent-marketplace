@@ -492,6 +492,9 @@ async def _fetch_amazon_coupons(asin: str) -> List[Dict]:
                 match = re.search(pattern, html, re.IGNORECASE)
                 if match:
                     text = match.group(1).strip()
+                    # Sanitize: reject if it contains JS/HTML artifacts
+                    if len(text) > 150 or '{' in text or '<' in text or 'function' in text.lower() or 'ajax' in text.lower() or 'document' in text.lower() or '.com' in text:
+                        continue
                     if text and ("coupon" in text.lower() or "%" in text or "₹" in text or "$" in text):
                         coupons.append({
                             "code": "CLIP_COUPON",
