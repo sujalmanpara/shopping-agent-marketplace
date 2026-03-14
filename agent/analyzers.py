@@ -962,13 +962,20 @@ def generate_price_alerts(asin: str, current_price: float, country: str = "IN") 
     currency = "INR" if country == "IN" else "USD"
     
     alerts = []
+    currency = "₹" if country == "IN" else "$"
     
-    # Target prices (10%, 20%, 30% drops)
+    # Target prices (10%, 20%, 30% drops) with context
     targets = []
     if current_price:
+        labels = {10: "Good deal", 20: "Great deal", 30: "Steal"}
         for pct in [10, 20, 30]:
             target = round(current_price * (1 - pct/100))
-            targets.append({"drop_pct": pct, "target_price": target})
+            targets.append({
+                "drop_pct": pct,
+                "target_price": target,
+                "label": labels[pct],
+                "savings": round(current_price - target),
+            })
     
     # ── CamelCamelCamel (free, no account needed) ──
     camel_domain = "in" if country == "IN" else "com"

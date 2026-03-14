@@ -708,13 +708,21 @@ def format_beautiful_output(
 
     if price_alerts and price_alerts.get("alerts"):
         pa = price_alerts
-        output.append("  🔔 SET PRICE DROP ALERTS:")
+        output.append("  🔔 PRICE DROP ALERTS")
+        output.append("  " + "─" * 40)
         targets = pa.get("targets", [])
-        if targets:
-            target_str = " | ".join(f"-{t['drop_pct']}% = ₹{t['target_price']:,}" for t in targets)
-            output.append(f"  🎯 {target_str}")
+        if targets and price_numeric:
+            output.append(f"  Set alerts and get notified when the price drops:")
+            output.append("")
+            for t in targets:
+                label = t.get("label", "")
+                savings = t.get("savings", 0)
+                output.append(f"     🎯 ₹{t['target_price']:,}  ({label} — save ₹{savings:,})")
+            output.append("")
+        output.append("  Track prices for free:")
         for alert in pa.get("alerts", [])[:3]:
-            output.append(f"     → {alert['service']}: {alert['url']}")
+            output.append(f"     • {alert['service']} — {alert['description']}")
+            output.append(f"       {alert['url']}")
         output.append("")
 
     # ════════════════════════════════════════════════════════════

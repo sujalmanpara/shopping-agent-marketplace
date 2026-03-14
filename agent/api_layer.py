@@ -364,7 +364,7 @@ async def _fetch_amazon_camoufox(asin: str, token: str, port: int = 9222, countr
     product_url = f"https://www.{domain}/dp/{asin}"
     base = f"http://localhost:{port}?token={token}"
 
-    # JavaScript to extract product data (IIFE, no arrow functions — Camoufox compat)
+    # JavaScript to extract product data + reviews (IIFE, no arrow functions — Camoufox compat)
     js_extract = """(function() {
         var data = {
             title: (document.querySelector('#productTitle') || {}).textContent || '',
@@ -388,6 +388,28 @@ async def _fetch_amazon_camoufox(asin: str, token: str, port: int = 9222, countr
         data.price_fraction = data.price_fraction.trim();
         data.review_count = data.review_count.trim();
         data.brand = data.brand.trim();
+
+        // Extract reviews from product page
+        data.reviews = [];
+        var reviewEls = document.querySelectorAll('[data-hook="review"]');
+        for (var i = 0; i < reviewEls.length && i < 20; i++) {
+            var el = reviewEls[i];
+            var bodyEl = el.querySelector('[data-hook="review-body"] span');
+            var rEl = el.querySelector('[data-hook="review-star-rating"] span, .review-rating span');
+            var titleEl = el.querySelector('[data-hook="review-title"] span:last-child');
+            var dateEl = el.querySelector('[data-hook="review-date"]');
+            var vpEl = el.querySelector('[data-hook="avp-badge"]');
+            var body = bodyEl ? bodyEl.textContent.trim() : '';
+            var rText = rEl ? rEl.textContent.trim() : '';
+            var rNum = parseFloat(rText) || 0;
+            data.reviews.push({
+                body: body,
+                rating: rNum,
+                title: titleEl ? titleEl.textContent.trim() : '',
+                date: dateEl ? dateEl.textContent.trim().replace('Reviewed in India on ', '').replace('Reviewed in the United States on ', '') : '',
+                verified: !!vpEl
+            });
+        }
         return JSON.stringify(data);
     })()"""
 
@@ -454,13 +476,26 @@ async def _fetch_amazon_camoufox(asin: str, token: str, port: int = 9222, countr
             if rc_digits:
                 review_count = int(rc_digits)
 
+        # Parse extracted reviews
+        reviews = []
+        for r in data.get("reviews", []):
+            body = r.get("body", "")
+            if body and len(body) > 5:  # Skip empty/tiny reviews
+                reviews.append({
+                    "body": body,
+                    "rating": r.get("rating", 0),
+                    "title": r.get("title", ""),
+                    "date": r.get("date", ""),
+                    "verified": r.get("verified", False),
+                })
+
         return {
             "title": title,
             "price": price,
             "price_display": f"₹{price:,.0f}" if price and country == "IN" else f"${price:,.2f}" if price else "N/A",
             "rating": rating,
             "review_count": review_count,
-            "reviews": [],  # Browser mode doesn't scrape individual reviews
+            "reviews": reviews,
             "asin": asin,
             "url": product_url,
             "source_method": "camoufox_browser",
