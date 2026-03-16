@@ -530,10 +530,11 @@ def format_beautiful_output(
     if risk == "insufficient_data":
         output.append(f"  {fake_analysis.get('reason', 'Not enough reviews for analysis')}")
     elif risk not in ("unknown",):
-        score = fake_analysis.get("score", 0)
         total = fake_analysis.get("total_analyzed", 0)
         suspicious = fake_analysis.get("suspicious_count", 0)
-        output.append(f"  {suspicious}/{total} reviews flagged as suspicious ({score}%)")
+        # Calculate actual percentage from counts (not stale score field)
+        actual_pct = round((suspicious / total) * 100) if total > 0 else 0
+        output.append(f"  {suspicious}/{total} reviews flagged as suspicious ({actual_pct}%)")
         method = fake_analysis.get("method", "")
         if method:
             output.append(f"  Method: {method} ({fake_analysis.get('model_accuracy', 'N/A')} accuracy)")

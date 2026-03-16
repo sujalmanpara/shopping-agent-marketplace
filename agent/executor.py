@@ -68,7 +68,7 @@ async def execute(
         return
 
     # Determine country from platform
-    country = "IN" if platform == "amazon_in" or "amazon.in" in prompt.lower() else "IN"  # Default to India
+    country = "IN" if platform == "amazon_in" or "amazon.in" in prompt.lower() else "US"
 
     yield sse_event("status", "🔍 Analyzing product across 10+ data sources...")
 
@@ -82,9 +82,24 @@ async def execute(
         product_name = amazon_data.get("title", "")
         brand = product_name.split()[0] if product_name else ""
         price_numeric = amazon_data.get("price")
+
+        # Detect if product is actually empty/unknown despite "success"
+        if not product_name or product_name.lower() in ("unknown product", ""):
+            yield sse_event("error", f"⚠️ Could not retrieve product details for ASIN {asin}. The product may have been removed from Amazon or the listing is unavailable.")
+            yield sse_event("result", f"❌ Product Not Found\n\nASIN {asin} could not be found on Amazon. It may have been delisted, removed, or the ASIN may be invalid.\n\nTry:\n• Check the URL and ASIN are correct\n• Visit amazon.in/dp/{asin} to confirm the product exists\n• Try a different ASIN or product URL")
+            return
     else:
-        # Graceful degradation: even if Amazon fails, try other sources with ASIN as query
-        product_name = f"Amazon product {asin}"
+        # Check if this is a 404 / product not found vs a temporary error
+        error_msg = amazon_result.get("error", "").lower()
+        is_not_found = any(x in error_msg for x in ["404", "not found", "http 404", "page not found"])
+
+        if is_not_found:
+            yield sse_event("error", f"Product not found: ASIN {asin} does not exist on Amazon.")
+            yield sse_event("result", f"❌ Product Not Found\n\nASIN {asin} could not be found on Amazon. The product may have been:\n• Delisted or removed by the seller\n• An invalid or mistyped ASIN\n• Region-restricted (not available in this marketplace)\n\nTry:\n• Double-check the Amazon URL\n• Search for the product by name instead")
+            return
+
+        # Graceful degradation for temporary errors: try other sources with ASIN
+        product_name = ""
         brand = ""
         price_numeric = None
         amazon_data = {
@@ -95,10 +110,15 @@ async def execute(
             "review_count": 0,
             "reviews": [],
             "asin": asin,
-            "url": f"https://www.amazon.in/dp/{asin}",
+            "url": f"https://www.amazon.{'in' if country == 'IN' else 'com'}/dp/{asin}",
             "source_method": "failed",
             "country": country,
         }
+
+    # Abort downstream searches if we have no product name — everything would be garbage
+    if not product_name:
+        yield sse_event("result", f"⚠️ Unable to retrieve product details for ASIN {asin}.\n\nAmazon may be temporarily unavailable or rate-limiting requests.\nPlease try again in a few minutes.")
+        return
 
     # ── Step 3: Fetch ALL other sources + alternatives in parallel ──
     yield sse_event("status", "🌐 Querying Reddit, YouTube, Keepa, ReviewMeta, Wirecutter, RTINGS, Trustpilot + finding alternatives...")

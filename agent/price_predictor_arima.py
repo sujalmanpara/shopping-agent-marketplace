@@ -407,28 +407,25 @@ def _get_upcoming_sales(country: str, now: datetime = None) -> List[Dict]:
     other_country = "US" if country == "IN" else "IN"
     
     for sale in sales:
-        for sale_month in sale["months"]:
-            # Calculate days until this sale month
-            if sale_month >= current_month:
-                days_away = (sale_month - current_month) * 30  # Approximate
-            else:
-                days_away = (12 - current_month + sale_month) * 30
-            
-            # Adjust to be more accurate (mid-month estimate)
-            target_date = now.replace(day=15)
-            if sale_month >= current_month:
+        # windows is list of (month, start_day, end_day) tuples
+        for window in sale.get("windows", []):
+            sale_month, start_day, end_day = window[0], window[1], window[2]
+            # Calculate days until this sale window
+            try:
+                if sale_month > current_month or (sale_month == current_month and end_day >= now.day):
+                    target_date = now.replace(month=sale_month, day=start_day)
+                    if target_date < now:
+                        target_date = now.replace(month=sale_month, day=end_day)
+                else:
+                    target_date = now.replace(year=now.year + 1, month=sale_month, day=start_day)
+            except ValueError:
                 try:
-                    target_date = now.replace(month=sale_month, day=15)
-                except ValueError:
-                    target_date = now.replace(month=sale_month, day=28)
-            else:
-                try:
-                    target_date = now.replace(year=now.year + 1, month=sale_month, day=15)
-                except ValueError:
                     target_date = now.replace(year=now.year + 1, month=sale_month, day=28)
-            
+                except ValueError:
+                    continue
+
             days_away = (target_date - now).days
-            
+
             if 0 < days_away <= 90:
                 upcoming.append({
                     "name": sale["name"],

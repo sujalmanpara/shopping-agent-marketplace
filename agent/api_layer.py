@@ -1033,34 +1033,38 @@ async def _fetch_google_shopping_camoufox(product_name: str, country: str = "IN"
     search_url = f"https://www.google.{tld}/search?q={product_name.replace(' ', '+')}&tbm=shop&hl=en"
 
     try:
-        result = subprocess.run(
-            ['curl', '-s', '-X', 'POST', f'http://localhost:9222/?token={camoufox_token}',
-             '-H', 'Content-Type: application/json',
-             '-d', _json.dumps({
-                "url": search_url,
-                "sessionId": "google-shopping-free",
-                "actions": [
-                    {"type": "wait", "ms": 5000},
-                    {"type": "evaluate", "script": """
-                        JSON.stringify(
-                            Array.from(document.querySelectorAll('.sh-dgr__grid-result, .sh-dgr__content, [data-docid]')).slice(0, 15).map(el => {
-                                const title = (el.querySelector('h3, .tAxDx, .Xjkr3b') || {}).innerText || '';
-                                const priceEl = el.querySelector('.a8Pemb, .HRLxBb, .kHxwFf, span[aria-label*="price"], .P8xhZc');
-                                const price = priceEl ? priceEl.innerText : '';
-                                const store = (el.querySelector('.aULzUe, .IuHnof, .E5ocAb') || {}).innerText || '';
-                                const link = (el.querySelector('a[href]') || {}).href || '';
-                                return {title, price, store, url: link};
-                            }).filter(x => x.title && x.price)
-                        )
-                    """}
-                ],
-                "screenshot": False,
-                "timeout": 15000
-             })],
-            capture_output=True, text=True, timeout=20
-        )
+        # Use httpx instead of subprocess+curl for proper async behaviour
+        payload = {
+            "url": search_url,
+            "sessionId": "google-shopping-free",
+            "actions": [
+                {"type": "wait", "ms": 5000},
+                {"type": "evaluate", "script": """
+                    JSON.stringify(
+                        Array.from(document.querySelectorAll('.sh-dgr__grid-result, .sh-dgr__content, [data-docid]')).slice(0, 15).map(el => {
+                            const title = (el.querySelector('h3, .tAxDx, .Xjkr3b') || {}).innerText || '';
+                            const priceEl = el.querySelector('.a8Pemb, .HRLxBb, .kHxwFf, span[aria-label*="price"], .P8xhZc');
+                            const price = priceEl ? priceEl.innerText : '';
+                            const store = (el.querySelector('.aULzUe, .IuHnof, .E5ocAb') || {}).innerText || '';
+                            const link = (el.querySelector('a[href]') || {}).href || '';
+                            return {title, price, store, url: link};
+                        }).filter(x => x.title && x.price)
+                    )
+                """}
+            ],
+            "screenshot": False,
+            "timeout": 15000
+        }
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                f'http://localhost:9222/?token={camoufox_token}',
+                json=payload,
+                headers={"Content-Type": "application/json"}
+            )
+            if resp.status_code != 200:
+                return None
 
-        data = _json.loads(result.stdout)
+        data = resp.json()
         items_raw = []
         for r in data.get('results', []):
             val = r.get('result', r) if isinstance(r, dict) else r

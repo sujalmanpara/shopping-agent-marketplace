@@ -17,7 +17,7 @@ try:
     _model = joblib.load(os.path.join(_MODELS_DIR, "fake_review_model.joblib"))
     _pipeline = joblib.load(os.path.join(_MODELS_DIR, "feature_pipeline.joblib"))
     # Fix TextColumnExtractor.column attr lost during unpickling (sklearn __getstate__ issue)
-    from features import TextColumnExtractor as _TextColumnExtractor
+    from .features import TextColumnExtractor as _TextColumnExtractor
     for _name, _transformer in _pipeline.transformer_list:
         if hasattr(_transformer, 'steps'):
             for _step_name, _step in _transformer.steps:
@@ -1185,10 +1185,14 @@ def calculate_confidence(source_results: Dict) -> Dict:
     if reviewmeta_data.get("adjusted_rating"):
         ratings.append(reviewmeta_data["adjusted_rating"] / 5.0)
 
-    # Trustpilot score
+    # Trustpilot score — NOTE: this is brand-level, not product-level.
+    # Only include if it's notably positive (>4.0) to avoid unfairly penalising good products
+    # due to brand-wide support complaints. A Samsung phone should not AVOID due to Samsung's
+    # corporate Trustpilot score dragging down the product verdict.
     trustpilot_data = sources.get("trustpilot", {}).get("data", {})
-    if trustpilot_data.get("trust_score"):
-        ratings.append(trustpilot_data["trust_score"] / 5.0)
+    tp_score = trustpilot_data.get("trust_score")
+    if tp_score and tp_score >= 4.0:
+        ratings.append(tp_score / 5.0)  # Only add if notably good (brand endorsement)
 
     # RTINGS score
     rtings_data = sources.get("rtings", {}).get("data", {})
@@ -1234,17 +1238,19 @@ def calculate_confidence(source_results: Dict) -> Dict:
         quality_signals += 0.2
     quality_count += 1
 
-    # YouTube: total views
+    # YouTube: total views (free scraper returns 0 views — use found count as signal)
     youtube_data = sources.get("youtube", {}).get("data", {})
     total_views = youtube_data.get("total_views", 0)
+    videos_found = youtube_data.get("found", 0) or len(youtube_data.get("videos", []))
     if total_views > 100000:
         quality_signals += 1.0
     elif total_views > 10000:
         quality_signals += 0.7
     elif total_views > 1000:
         quality_signals += 0.4
-    elif youtube_data.get("found", 0) > 0:
-        quality_signals += 0.2
+    elif videos_found > 0:
+        # Videos found but views unknown (free scraper) — still counts as signal
+        quality_signals += 0.3
     quality_count += 1
 
     # Keepa: price history depth

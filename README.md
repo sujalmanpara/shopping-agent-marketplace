@@ -16,7 +16,7 @@ Fake reviews detected. Real prices compared. Expert opinions gathered. AI verdic
 
 <img src="https://img.shields.io/badge/⏱️_Average_Response-5--12s-green?style=for-the-badge" />
 <img src="https://img.shields.io/badge/📊_Data_Sources-10+-blue?style=for-the-badge" />
-<img src="https://img.shields.io/badge/💰_Works_With-Zero_API_Keys-orange?style=for-the-badge" />
+<img src="https://img.shields.io/badge/💰_Needs-1_LLM_Key-orange?style=for-the-badge" />
 
 <br/><br/>
 
@@ -44,10 +44,11 @@ cd shopping-agent-marketplace
 pip install -r requirements.txt
 ```
 
-**Minimum setup — just ONE key:**
+**Minimum setup — just ONE LLM key required:**
 ```bash
-# .env file — only an LLM key is required
+# .env file — only one LLM key is required to get started
 OPENAI_API_KEY=sk-your-key-here
+# Or use: ANTHROPIC_API_KEY / GEMINI_API_KEY / GROK_API_KEY / OPENROUTER_API_KEY
 ```
 
 **Run it:**
@@ -312,9 +313,9 @@ Everything else:
 |-------------|:----------:|:-------:|:------------:|
 | 🇮🇳 Amazon.in | ✅ | ✅ | ✅ |
 | 🇺🇸 Amazon.com | ✅ | ✅ | ✅ |
-| 🇬🇧 Amazon.co.uk | ✅ | ✅ | ✅ |
-| 🇩🇪 Amazon.de | ✅ | ✅ | ✅ |
-| More domains | ✅ | ✅ | ✅ |
+| 🇬🇧 Amazon.co.uk | 🔜 | 🔜 | 🔜 |
+| 🇩🇪 Amazon.de | 🔜 | 🔜 | 🔜 |
+| More coming | — | — | — |
 
 ---
 
