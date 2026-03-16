@@ -880,9 +880,42 @@ async def fetch_youtube_reviews(product_name: str, keys: dict = None) -> Dict:
         except Exception:
             pass  # Fall through to HTTP fallback
     
-    # Fallback: No API key — return empty with note
+    # Fallback: Free YouTube search via web scrape (no API key needed)
+    try:
+        import re as yre
+        search_query = f"{product_name} review"
+        yt_url = f"https://www.youtube.com/results?search_query={search_query.replace(' ', '+')}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            resp = await client.get(yt_url, headers=headers)
+            if resp.status_code == 200:
+                html = resp.text
+                # Extract video IDs and titles from YouTube search results page
+                video_matches = yre.findall(r'"videoId":"([^"]{11})".*?"title":\{"runs":\[\{"text":"([^"]+)"\}', html)
+                seen_ids = set()
+                videos = []
+                for vid_id, title in video_matches:
+                    if vid_id not in seen_ids and len(videos) < 3:
+                        seen_ids.add(vid_id)
+                        videos.append({
+                            "title": title[:80],
+                            "url": f"https://youtube.com/watch?v={vid_id}",
+                            "video_id": vid_id,
+                            "channel": "",
+                            "views": "",
+                            "source": "youtube_free_search",
+                        })
+                if videos:
+                    latency = (time.time() - start) * 1000
+                    return _success("youtube_free", {"videos": videos}, latency)
+    except Exception:
+        pass
+
     latency = (time.time() - start) * 1000
-    return _failure("youtube", "No YouTube API key provided. Set YOUTUBE_API_KEY for video reviews.", latency)
+    return _failure("youtube", "YouTube search unavailable.", latency)
 
 # ============================================================
 # SOURCE 4: Keepa (Price History)
@@ -974,6 +1007,111 @@ async def fetch_keepa_history(asin: str, keys: dict = None) -> Dict:
 # SOURCE 5: Google Shopping (via SerpAPI or direct)
 # ============================================================
 
+
+async def _fetch_google_shopping_free(product_name: str, country: str = "IN") -> Optional[Dict]:
+    """
+    Free Google Shopping fallback — scrapes DuckDuckGo shopping results.
+    No API key needed. Returns price comparisons from multiple stores.
+    """
+    import re
+    query = f"{product_name} price buy"
+    url = "https://html.duckduckgo.com/html/"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0",
+    }
+    data = {"q": query, "kl": "in-en" if country == "IN" else "us-en"}
+
+    async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+        try:
+            resp = await client.post(url, headers=headers, data=data)
+            if resp.status_code != 200:
+                return None
+
+            html = resp.text
+            # Parse DuckDuckGo results for price mentions
+            results = []
+            # Find result snippets with prices
+            currency = "₹" if country == "IN" else "$"
+            price_pattern = re.escape(currency) + r'\s*([\d,]+(?:\.\d{2})?)'
+            
+            # Extract result blocks
+            from html.parser import HTMLParser
+            
+            class DDGParser(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.results = []
+                    self.current = {}
+                    self.in_result = False
+                    self.in_title = False
+                    self.in_snippet = False
+                    
+                def handle_starttag(self, tag, attrs):
+                    attrs_dict = dict(attrs)
+                    cls = attrs_dict.get('class', '')
+                    if 'result__title' in cls:
+                        self.in_title = True
+                        self.current = {'title': '', 'snippet': '', 'url': ''}
+                    elif 'result__snippet' in cls:
+                        self.in_snippet = True
+                    elif tag == 'a' and self.in_title:
+                        self.current['url'] = attrs_dict.get('href', '')
+                        
+                def handle_endtag(self, tag):
+                    if self.in_title and tag in ('a', 'h2'):
+                        self.in_title = False
+                    elif self.in_snippet and tag == 'a':
+                        self.in_snippet = False
+                        if self.current.get('title'):
+                            self.results.append(self.current)
+                            self.current = {}
+                            
+                def handle_data(self, data):
+                    if self.in_title:
+                        self.current['title'] = self.current.get('title', '') + data
+                    elif self.in_snippet:
+                        self.current['snippet'] = self.current.get('snippet', '') + data
+
+            parser = DDGParser()
+            parser.feed(html)
+            
+            # Extract prices from snippets
+            products = []
+            for r in parser.results[:15]:
+                snippet = r.get('snippet', '') + ' ' + r.get('title', '')
+                prices = re.findall(price_pattern, snippet)
+                if prices:
+                    try:
+                        price_val = float(prices[0].replace(",", ""))
+                        # Extract store name from URL
+                        from urllib.parse import urlparse
+                        store = urlparse(r.get('url', '')).netloc.replace('www.', '')
+                        products.append({
+                            "title": r.get('title', '')[:80],
+                            "price": price_val,
+                            "price_display": f"{currency}{price_val:,.0f}",
+                            "store": store,
+                            "url": r.get('url', ''),
+                        })
+                    except (ValueError, IndexError):
+                        continue
+
+            if not products:
+                return None
+
+            # Sort by price
+            products.sort(key=lambda x: x.get("price", float("inf")))
+
+            return {
+                "products": products[:10],
+                "lowest_price": products[0]["price"] if products else None,
+                "lowest_store": products[0]["store"] if products else None,
+                "source": "duckduckgo_shopping",
+            }
+        except Exception:
+            return None
+
+
 async def fetch_google_shopping(product_name: str, country: str = "IN", keys: dict = None) -> Dict:
     """
     Fetch price comparison from Google Shopping.
@@ -989,7 +1127,16 @@ async def fetch_google_shopping(product_name: str, country: str = "IN", keys: di
     serpapi_key = (keys or {}).get("SERPAPI_KEY")
     
     if not serpapi_key:
-        return _failure("google_shopping", "No SerpAPI key. Set SERPAPI_KEY for Google Shopping (~$50/month).", 0)
+        # Fallback: scrape Google Shopping directly via HTTP
+        try:
+            result = await _fetch_google_shopping_free(product_name, country)
+            if result:
+                latency = (time.time() - start) * 1000
+                _cache_set(cache_key, result, ttl_seconds=1800)
+                return _success("google_shopping_free", result, latency)
+        except Exception:
+            pass
+        return _failure("google_shopping", "No SerpAPI key and free fallback failed.", 0)
     
     try:
         url = "https://serpapi.com/search.json"
