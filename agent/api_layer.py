@@ -1008,108 +1008,103 @@ async def fetch_keepa_history(asin: str, keys: dict = None) -> Dict:
 # ============================================================
 
 
-async def _fetch_google_shopping_free(product_name: str, country: str = "IN") -> Optional[Dict]:
+async def _fetch_google_shopping_camoufox(product_name: str, country: str = "IN") -> Optional[Dict]:
     """
-    Free Google Shopping fallback — scrapes DuckDuckGo shopping results.
-    No API key needed. Returns price comparisons from multiple stores.
+    Free Google Shopping fallback via Camoufox stealth browser.
+    Scrapes Google Shopping results directly — no API key needed.
+    Requires Camoufox browser server running on port 9222.
     """
+    import json as _json
+    import subprocess
     import re
-    query = f"{product_name} price buy"
-    url = "https://html.duckduckgo.com/html/"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0",
-    }
-    data = {"q": query, "kl": "in-en" if country == "IN" else "us-en"}
 
-    async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-        try:
-            resp = await client.post(url, headers=headers, data=data)
-            if resp.status_code != 200:
-                return None
+    # Get Camoufox token
+    camoufox_token = ""
+    try:
+        with open("/data/browser-server-token", "r") as f:
+            camoufox_token = f.read().strip()
+    except Exception:
+        pass
+    if not camoufox_token:
+        return None
 
-            html = resp.text
-            # Parse DuckDuckGo results for price mentions
-            results = []
-            # Find result snippets with prices
-            currency = "₹" if country == "IN" else "$"
-            price_pattern = re.escape(currency) + r'\s*([\d,]+(?:\.\d{2})?)'
-            
-            # Extract result blocks
-            from html.parser import HTMLParser
-            
-            class DDGParser(HTMLParser):
-                def __init__(self):
-                    super().__init__()
-                    self.results = []
-                    self.current = {}
-                    self.in_result = False
-                    self.in_title = False
-                    self.in_snippet = False
-                    
-                def handle_starttag(self, tag, attrs):
-                    attrs_dict = dict(attrs)
-                    cls = attrs_dict.get('class', '')
-                    if 'result__title' in cls:
-                        self.in_title = True
-                        self.current = {'title': '', 'snippet': '', 'url': ''}
-                    elif 'result__snippet' in cls:
-                        self.in_snippet = True
-                    elif tag == 'a' and self.in_title:
-                        self.current['url'] = attrs_dict.get('href', '')
-                        
-                def handle_endtag(self, tag):
-                    if self.in_title and tag in ('a', 'h2'):
-                        self.in_title = False
-                    elif self.in_snippet and tag == 'a':
-                        self.in_snippet = False
-                        if self.current.get('title'):
-                            self.results.append(self.current)
-                            self.current = {}
-                            
-                def handle_data(self, data):
-                    if self.in_title:
-                        self.current['title'] = self.current.get('title', '') + data
-                    elif self.in_snippet:
-                        self.current['snippet'] = self.current.get('snippet', '') + data
+    tld = "co.in" if country == "IN" else "com"
+    currency = "₹" if country == "IN" else "$"
+    search_url = f"https://www.google.{tld}/search?q={product_name.replace(' ', '+')}&tbm=shop&hl=en"
 
-            parser = DDGParser()
-            parser.feed(html)
-            
-            # Extract prices from snippets
-            products = []
-            for r in parser.results[:15]:
-                snippet = r.get('snippet', '') + ' ' + r.get('title', '')
-                prices = re.findall(price_pattern, snippet)
-                if prices:
-                    try:
-                        price_val = float(prices[0].replace(",", ""))
-                        # Extract store name from URL
-                        from urllib.parse import urlparse
-                        store = urlparse(r.get('url', '')).netloc.replace('www.', '')
-                        products.append({
-                            "title": r.get('title', '')[:80],
-                            "price": price_val,
-                            "price_display": f"{currency}{price_val:,.0f}",
-                            "store": store,
-                            "url": r.get('url', ''),
-                        })
-                    except (ValueError, IndexError):
-                        continue
+    try:
+        result = subprocess.run(
+            ['curl', '-s', '-X', 'POST', f'http://localhost:9222/?token={camoufox_token}',
+             '-H', 'Content-Type: application/json',
+             '-d', _json.dumps({
+                "url": search_url,
+                "sessionId": "google-shopping-free",
+                "actions": [
+                    {"type": "wait", "ms": 5000},
+                    {"type": "evaluate", "script": """
+                        JSON.stringify(
+                            Array.from(document.querySelectorAll('.sh-dgr__grid-result, .sh-dgr__content, [data-docid]')).slice(0, 15).map(el => {
+                                const title = (el.querySelector('h3, .tAxDx, .Xjkr3b') || {}).innerText || '';
+                                const priceEl = el.querySelector('.a8Pemb, .HRLxBb, .kHxwFf, span[aria-label*="price"], .P8xhZc');
+                                const price = priceEl ? priceEl.innerText : '';
+                                const store = (el.querySelector('.aULzUe, .IuHnof, .E5ocAb') || {}).innerText || '';
+                                const link = (el.querySelector('a[href]') || {}).href || '';
+                                return {title, price, store, url: link};
+                            }).filter(x => x.title && x.price)
+                        )
+                    """}
+                ],
+                "screenshot": False,
+                "timeout": 15000
+             })],
+            capture_output=True, text=True, timeout=20
+        )
 
-            if not products:
-                return None
+        data = _json.loads(result.stdout)
+        items_raw = []
+        for r in data.get('results', []):
+            val = r.get('result', r) if isinstance(r, dict) else r
+            try:
+                items_raw = _json.loads(val)
+                if isinstance(items_raw, list) and len(items_raw) > 0:
+                    break
+            except:
+                continue
 
-            # Sort by price
-            products.sort(key=lambda x: x.get("price", float("inf")))
-
-            return {
-                "products": products[:10],
-                "lowest_price": products[0]["price"] if products else None,
-                "lowest_store": products[0]["store"] if products else None,
-                "source": "duckduckgo_shopping",
-            }
-        except Exception:
+        if not items_raw:
             return None
+
+        products = []
+        price_pattern = r'([\d,]+(?:\.\d{2})?)'
+        for item in items_raw:
+            price_str = item.get('price', '')
+            prices = re.findall(price_pattern, price_str.replace(',', ''))
+            if prices:
+                try:
+                    price_val = float(prices[0])
+                    products.append({
+                        "title": item.get('title', '')[:80],
+                        "price": price_val,
+                        "price_display": f"{currency}{price_val:,.0f}",
+                        "store": item.get('store', 'Unknown'),
+                        "url": item.get('url', ''),
+                    })
+                except (ValueError, IndexError):
+                    continue
+
+        if not products:
+            return None
+
+        products.sort(key=lambda x: x.get("price", float("inf")))
+
+        return {
+            "products": products[:10],
+            "lowest_price": products[0]["price"] if products else None,
+            "lowest_store": products[0]["store"] if products else None,
+            "source": "google_shopping_camoufox",
+        }
+    except Exception:
+        return None
 
 
 async def fetch_google_shopping(product_name: str, country: str = "IN", keys: dict = None) -> Dict:
@@ -1127,16 +1122,16 @@ async def fetch_google_shopping(product_name: str, country: str = "IN", keys: di
     serpapi_key = (keys or {}).get("SERPAPI_KEY")
     
     if not serpapi_key:
-        # Fallback: scrape Google Shopping directly via HTTP
+        # Fallback: Camoufox Google Shopping scrape (stealth browser)
         try:
-            result = await _fetch_google_shopping_free(product_name, country)
+            result = await _fetch_google_shopping_camoufox(product_name, country)
             if result:
                 latency = (time.time() - start) * 1000
                 _cache_set(cache_key, result, ttl_seconds=1800)
-                return _success("google_shopping_free", result, latency)
+                return _success("google_shopping_camoufox", result, latency)
         except Exception:
             pass
-        return _failure("google_shopping", "No SerpAPI key and free fallback failed.", 0)
+        return _failure("google_shopping", "No SerpAPI key and Camoufox fallback failed.", 0)
     
     try:
         url = "https://serpapi.com/search.json"
