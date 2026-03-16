@@ -319,6 +319,16 @@ Everything else:
 
 ---
 
+## 📚 Documentation
+
+| Doc | What's Inside |
+|-----|--------------|
+| **[Setup Guide](docs/SETUP.md)** | Step-by-step setup, all API key signups, troubleshooting |
+| **[How It Works](docs/HOW_IT_WORKS.md)** | Full explanation of every analysis module, data sources, scoring |
+| **[API Reference](docs/API_REFERENCE.md)** | Function signatures, return types, web server integration |
+
+---
+
 ## 🔒 Privacy & Security
 
 - **Your keys stay local** — never sent anywhere except the API providers you configure
