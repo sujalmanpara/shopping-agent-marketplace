@@ -503,6 +503,9 @@ def format_beautiful_output(
             output.append("  " + "─" * 40)
             for v in yt_videos[:2]:
                 views = v.get("views", 0)
+                # Normalize views to int (free scraper may return string)
+                if isinstance(views, str):
+                    views = int(''.join(c for c in views if c.isdigit()) or '0')
                 if views >= 1_000_000:
                     views_str = f"{views / 1_000_000:.1f}M views"
                 elif views >= 1_000:
