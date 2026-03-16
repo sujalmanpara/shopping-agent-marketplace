@@ -1,25 +1,14 @@
 # Shopping Truth Agent — Dependencies
 # Install: pip install -r requirements.txt
 
-# ── Core ──
-httpx>=0.24.0           # HTTP client for all API calls
-python-dotenv>=1.0.0    # Load .env file
+# ── Core (required) ──
+httpx>=0.24.0           # Async HTTP client for all API calls
 
-# ── ML / Analysis ──
-numpy>=1.24.0
-scipy>=1.10.0
-pandas>=2.0.0
-scikit-learn>=1.3.0
-xgboost>=1.7.0
-joblib>=1.3.0
-statsmodels>=0.14.0     # ARIMA price prediction
+# ── ML / Analysis (optional — agent works without these) ──
+numpy>=1.24.0           # Numerical analysis
+# xgboost>=1.7.0        # ML fake review detection (optional, falls back to keyword)
+# scikit-learn>=1.3.0   # ML utilities (optional)
+# scipy>=1.10.0         # Statistical analysis (optional)
+# statsmodels>=0.14.0   # ARIMA price prediction (optional)
 
-# ── Sentiment analysis (fake review detection) ──
-textblob>=0.17.0
-
-# ── API Server (optional — only needed if running as web server) ──
-fastapi>=0.100.0
-uvicorn>=0.23.0
-
-# ── Python version requirement ──
-# Python >= 3.10
+# Python >= 3.10 required

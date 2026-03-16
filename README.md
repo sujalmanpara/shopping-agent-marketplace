@@ -2,141 +2,257 @@
 
 # 🛒 Shopping Truth Agent
 
-**AI-Powered Shopping Advisor for Nextbase Marketplace**
+### The AI That Tells You What Amazon Won't
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Nextbase](https://img.shields.io/badge/Nextbase-Marketplace-green.svg)](https://agents.nextbase.solutions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 
-**Stop wasting money on hyped products.** This AI agent analyzes **15+ platforms**, detects fake reviews, predicts price drops, and tells you the **truth** before you buy.
+**Paste any Amazon link. Get the truth in under 10 seconds.**
 
-[Features](#-features) • [Demo](#-demo) • [Installation](#-installation) • [Documentation](#-documentation) • [Roadmap](#-roadmap)
+Fake reviews detected. Real prices compared. Expert opinions gathered. AI verdict delivered.
+
+<br/>
+
+<img src="https://img.shields.io/badge/⏱️_Average_Response-5--12s-green?style=for-the-badge" />
+<img src="https://img.shields.io/badge/📊_Data_Sources-10+-blue?style=for-the-badge" />
+<img src="https://img.shields.io/badge/💰_Works_With-Zero_API_Keys-orange?style=for-the-badge" />
+
+<br/><br/>
+
+[Quick Start](#-quick-start) · [How It Works](#-how-it-works) · [Features](#-what-you-get) · [API Keys](#-api-keys--optional-upgrades) · [Sample Output](#-sample-output)
 
 </div>
 
 ---
 
-## 🔥 Why This Agent?
+## 💡 The Problem
 
-Most shopping decisions rely on **Amazon reviews** — which are often fake, biased, or outdated. This agent:
+> **61% of Amazon reviews are fake.** You know it. We know it. But you still buy based on them.
 
-✅ **Cross-references 15+ sources** (Amazon, Walmart, Target, BestBuy, Flipkart, Reddit, YouTube, TikTok, Twitter, Consumer Reports, Wirecutter, RTINGS, Trustpilot, Fakespot, BBB)  
-✅ **Undetectable scraping** powered by Camoufox stealth browser  
-✅ **Detects fake reviews** using XGBoost ML (90.2% accuracy)  
-✅ **Spots quality decline** over time (regret detector)  
-✅ **Predicts price drops** using ARIMA ML (90%+ accuracy)  
-✅ **Finds better alternatives** at lower prices  
-✅ **Hybrid scraping engine** — fast for simple sites, stealth for protected sites
+Every product page tells you the same story: ⭐⭐⭐⭐⭐ "Great product!" — posted by accounts that reviewed 47 products in one day.
 
-**Result:** Make smarter buying decisions, save money, avoid regret.
+**Shopping Truth Agent fixes this.** It pulls data from **10+ independent sources**, runs fake review detection, compares prices across stores, finds coupons, and gives you an honest **BUY / WAIT / AVOID** verdict.
 
 ---
 
-## 🎯 Features
-
-### ✅ **Multi-Platform Analysis**
-- **Amazon** — Price, ratings, reviews, Q&A
-- **Reddit** — Brutally honest user experiences (r/BuyItForLife, etc.)
-- **YouTube** — Video reviews and demonstrations
-- **Twitter** — Real-time sentiment and complaints
-- *More sources coming soon (TikTok, Google Reviews, Trustpilot)*
-
-### 🕵️ **Fake Review Detection**
-- Pattern-based ML identifies suspicious reviews
-- Flags generic praise + short length
-- Detects review bombing campaigns
-- Risk score: `low` / `medium` / `high`
-
-### ⚠️ **Regret Detector**
-- Analyzes review timelines (launch vs 6 months later)
-- Spots products where ratings **drop over time**
-- Common issues: durability, battery life, customer support
-
-### 📊 **Confidence Scoring**
-Weighted by source reliability:
-- Reddit: 30% (most honest)
-- YouTube: 25% (video proof)
-- Twitter: 20% (real-time)
-- Amazon Q&A: 15%
-
-### 🤖 **LLM-Powered Verdict**
-Clear, actionable advice:
-- **BUY** — Low risk, good value
-- **WAIT** — Price drop expected soon
-- **AVOID** — High fake review risk or quality issues
-
----
-
-## 🎬 Demo
+## ⚡ Quick Start
 
 ```bash
-# Analyze a product
-Analyze this product: https://amazon.com/dp/B08N5WRWNW
-
-# Output:
-🔍 Extracting product data...
-⏳ Gathering data from Amazon, Reddit, YouTube, Twitter...
-✅ Amazon (4.7★, 73K reviews)
-✅ Reddit (247 mentions)
-✅ YouTube (19 video reviews)
-✅ Twitter (1.2K tweets)
-
-🤖 Analyzing fake reviews and sentiment patterns...
-📝 Generating shopping advice...
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📦 Sony WH-1000XM4 Wireless Headphones
-💰 $278.00 | ⭐ 4.7/5 (73,429 reviews)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📊 Analysis:
-  • Fake Review Risk: LOW (12% suspicious)
-  • Regret Warning: MEDIUM (ratings dropped 0.6★ over time)
-  • Confidence: 87% (high)
-
-⚠️ VERDICT: WAIT
-
-Solid headphones but ear pads wear out after 6-12 months (common complaint on Reddit). 
-Price likely to drop 15% during Prime Day in 3 weeks. 
-Buy if discounted below $240, otherwise wait.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
----
-
-## 📦 Installation
-
-### For Nextbase Marketplace Backend:
-
-```bash
-# Clone this repo
 git clone https://github.com/sujalmanpara/shopping-agent-marketplace.git
 cd shopping-agent-marketplace
-
-# Copy agent files
-cp -r agent/* /path/to/your/nextbase-backend/app/agents/shopping_agent/
-
-# Install dependencies
-pip install httpx beautifulsoup4
-
-# Reload agents
-curl -X POST https://your-backend.railway.app/admin/agents/reload \
-  -H "X-Admin-Secret: your-admin-secret"
+pip install -r requirements.txt
 ```
 
-### For OpenClaw Users:
-
+**Minimum setup — just ONE key:**
 ```bash
-# Install from marketplace
-/agent install shopping-agent
+# .env file — only an LLM key is required
+OPENAI_API_KEY=sk-your-key-here
+```
 
-# Set your API key
-export OPENAI_API_KEY=sk-xxx
+**Run it:**
+```python
+import asyncio
+from agent.executor import execute
 
-# Test it
-Analyze https://amazon.com/dp/B08N5WRWNW
+async def main():
+    keys = {"OPENAI_API_KEY": "sk-your-key"}
+    async for event in execute("https://www.amazon.in/dp/B09R4SF5SP", keys):
+        if event["event"] == "status":
+            print(event["data"])
+        elif event["event"] == "result":
+            print(event["data"])
+
+asyncio.run(main())
+```
+
+**That's it.** No complex setup. No 10 API keys to configure. Just paste a link and get the truth.
+
+---
+
+## 🔍 How It Works
+
+```
+📎 Paste Amazon Link
+        │
+        ▼
+┌─────────────────────────────────────────┐
+│  🔄 Parallel Data Collection (3-8s)     │
+│                                         │
+│  Amazon Product Page ──► Price, specs   │
+│  Rating Widget ────────► 2000+ ratings  │
+│  YouTube ──────────────► Video reviews  │
+│  Google Shopping ──────► Price compare  │
+│  Wirecutter ───────────► Expert picks   │
+│  RTINGS ───────────────► Lab-tested     │
+│  Trustpilot ───────────► Brand trust    │
+│  Reddit ───────────────► Real opinions  │
+│  Keepa ────────────────► Price history  │
+└─────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────┐
+│  🧠 AI Analysis (<2s)                   │
+│                                         │
+│  Fake Review Detection (star patterns)  │
+│  Price Benchmarking (vs category avg)   │
+│  Review Quality Scoring                 │
+│  Timeline Analysis (organic vs fake)    │
+│  Coupon & Cashback Finder               │
+│  Alternative Product Search             │
+└─────────────────────────────────────────┘
+        │
+        ▼
+   🎯 BUY / WAIT / AVOID
+```
+
+**Total time: 5-15 seconds** depending on your connection.
+
+---
+
+## 🎁 What You Get
+
+### 📦 Product Intelligence
+- **Price with context** — Is ₹24,990 a good price? Agent tells you it's 10% below category average.
+- **Star distribution analysis** — A J-shaped curve (90% 5-star + 10% 1-star) = fake farm. Natural products have a bell curve.
+- **Review quality scoring** — Detailed reviews vs one-liners. Verified purchases vs unverified.
+
+### 🕵️ Fake Review Detection
+- **Star distribution analysis** from 2,000+ ratings (not just the 8 reviews on the page)
+- **J-score metric** — detects the signature pattern of paid review farms
+- **Review timeline analysis** — organic products gain reviews steadily, fakes get 500 reviews in one week
+- **Keyword flagging** — detects generic praise patterns
+
+### 💰 Price Intelligence
+- **Cross-store comparison** — Same product on Amazon, Flipkart, brand stores, and 5+ retailers
+- **Category benchmarking** — "This AC costs 10% less than similar models"
+- **Best deal calculator** — Combines cashback + credit card rewards for actual lowest price
+- **Price history** — Was it cheaper last month? (with Keepa API key)
+
+### 💳 Savings Engine
+- **Cashback platforms** — CashKaro, Magicpin, Amazon Pay
+- **Credit card rewards** — ICICI Amazon Pay (5%), HDFC Millennia (5%), Axis Flipkart (5%)
+- **UPI cashback** — Amazon Pay UPI deals
+- **Coupon codes** — Automatically discovered from multiple sources
+
+### 📺 Expert & Community Reviews
+- **YouTube** — Top video reviews with view counts
+- **Wirecutter** — New York Times expert picks
+- **RTINGS** — Lab-tested ratings for electronics
+- **Trustpilot** — Brand reputation scores
+- **Reddit** — Real user experiences (with API key)
+
+### 🤖 AI Verdict
+Clear, actionable advice powered by your choice of LLM:
+- **BUY** ✅ — Good product, fair price, real reviews
+- **WAIT** ⏳ — Price drop expected or better alternative exists
+- **AVOID** 🚫 — Fake reviews, overpriced, or quality issues
+
+---
+
+## 🔑 API Keys — Optional Upgrades
+
+The agent works with **just ONE key** (any LLM provider). Everything else is optional.
+
+| Key | What It Adds | Free Tier | Cost |
+|-----|-------------|-----------|------|
+| **LLM Key** (Required) | AI verdicts & summaries | — | Varies |
+| `OPENAI_API_KEY` | GPT-4 verdicts | Pay-per-use | ~$0.01/query |
+| `ANTHROPIC_API_KEY` | Claude verdicts | Pay-per-use | ~$0.01/query |
+| `GEMINI_API_KEY` | Gemini verdicts | Free tier! | Free |
+| `GROK_API_KEY` | Grok verdicts | Pay-per-use | ~$0.01/query |
+| | | | |
+| **Optional — Data Sources** | | | |
+| `YOUTUBE_API_KEY` | Better video results | Free (10K/day) | Free |
+| `SERPAPI_KEY` | Google Shopping prices | 100 free/mo | $50/mo |
+| `RAINFOREST_API_KEY` | 100+ Amazon reviews | — | $80/mo |
+| `SCRAPINGDOG_API_KEY` | Bulk Amazon reviews | 1,000 free/mo | $30/mo |
+| `KEEPA_API_KEY` | Price history graphs | — | €19/mo |
+| `REDDIT_CLIENT_ID` | Reddit discussions | Free | Free |
+| `REDDIT_CLIENT_SECRET` | Reddit discussions | Free | Free |
+
+### Without any optional keys, you still get:
+✅ Amazon product data (via stealth browser)
+✅ Star distribution from 2,000+ ratings
+✅ YouTube video reviews
+✅ Google Shopping prices (from residential IPs)
+✅ Wirecutter expert reviews
+✅ RTINGS lab-tested scores
+✅ Trustpilot brand trust
+✅ Fake review detection
+✅ Price benchmarking
+✅ Coupon & cashback finder
+✅ AI verdict
+
+---
+
+## 📸 Sample Output
+
+```
+╔══════════════════════════════════════════════════╗
+║          🛒  SHOPPING TRUTH AGENT  v2.0         ║
+╚══════════════════════════════════════════════════╝
+
+  📦 Daikin 0.8 Ton 3 Star Split AC
+  🏷️  DAIKIN
+
+  💰 ₹24,990     ★★★★☆ 4.1/5     📝 2,265 reviews
+
+  ┌────────────────────────────────┐
+  │  ✅  VERDICT:     GO FOR IT   │
+  └────────────────────────────────┘
+
+  Trust  ██████░░░░  64%    Fake Risk: 🟡 LIMITED    Sources: 6/8
+
+  ╭─── 💲 PRICE CHECK ───────────────────────────╮
+  │  🟢 Good price — 10% below average            │
+  │  Category avg: ₹27,713 • You: ₹24,990 (-10%) │
+  │  Compared across 10 similar products           │
+  ╰───────────────────────────────────────────────╯
+
+  ╭─── 🏆 YOUR BEST DEAL ──────────────────────────╮
+  │  CashKaro + ICICI Amazon Pay Card               │
+  │  Original:  ₹24,990                             │
+  │  You pay:   ₹23,241  💚 SAVE ₹1,749 (7.0% off) │
+  ╰───────────────────────────────────────────────╯
+
+  ⭐ STAR DISTRIBUTION (from 2,265 ratings)
+  5★ ████████████░░░░░░░░ 61%
+  4★ ███░░░░░░░░░░░░░░░░░ 18%
+  3★ █░░░░░░░░░░░░░░░░░░░  6%
+  2★ ░░░░░░░░░░░░░░░░░░░░  3%
+  1★ ██░░░░░░░░░░░░░░░░░░ 12%
+  ✅ Natural distribution — not a fake farm
+
+  📺 TOP VIDEO REVIEWS
+  🎬 Daikin 0.8T AC Unboxing — 109K views
+  🎬 Daikin FTL28TV Review  — 94K views
+
+  🛍️ ALTERNATIVES
+  1. Lloyd 0.8T 3★ Inverter — ₹23,990 (4% cheaper)
+  2. Daikin via Better Home  — ₹25,989
+  3. Havells Classic 0.8T    — ₹29,490
+
+  🔍 CROSS-STORE PRICES
+  Amazon.in:       ₹24,990 🏆
+  TheACWala:       ₹24,990
+  Ankur Electric:  ₹25,499
+  Tradexact:       ₹25,800
+  Better Home:     ₹25,989
+
+  💳 SAVINGS
+  • CashKaro: 2-6% cashback
+  • ICICI Amazon Pay Card: 5% back for Prime 🔥
+  • HDFC Millennia: 5% on Amazon via SmartBuy
+  • Amazon Pay UPI: Up to 10% during sales
+
+  🤖 AI VERDICT: BUY
+  Wirecutter Top Pick with 4.1★ from 2,265 reviews.
+  Price is 10% below average. Consider Lloyd for 4% savings.
+  Trustpilot score: 4.9/5. Reliable choice.
+
+  📊 SOURCES: ✅ Amazon │ ✅ YouTube │ ✅ Google Shopping
+              ✅ Wirecutter │ ✅ RTINGS │ ✅ Trustpilot
 ```
 
 ---
@@ -144,119 +260,119 @@ Analyze https://amazon.com/dp/B08N5WRWNW
 ## 🏗 Architecture
 
 ```
-User Query → Scrape Amazon + Reddit + YouTube + Twitter (parallel, 3-5s)
-           → Analyze fake reviews + regret patterns (< 100ms)
-           → Generate LLM summary (2-4s)
-           → Return verdict (BUY / WAIT / AVOID)
+shopping-agent-marketplace/
+├── agent/
+│   ├── executor.py          # Main orchestrator — SSE streaming
+│   ├── api_layer.py         # 10+ data sources with tiered fallbacks
+│   ├── analyzers.py         # Fake detection, star analysis, quality scoring
+│   ├── summarizer.py        # Beautiful terminal output formatter
+│   ├── price_predictor_arima.py  # ARIMA-based price prediction
+│   └── coupon_sniper.py     # Coupon & cashback discovery
+├── .env                     # Your API keys (gitignored)
+├── requirements.txt         # Python dependencies
+└── README.md
 ```
 
-**Total latency:** ~12-18 seconds  
-**No API keys required** (except user's LLM key)
+### Data Source Priority (Auto-Fallback)
 
-[Technical Details →](docs/ARCHITECTURE.md)
+Every source has a **tiered fallback chain** — the agent tries the best method first and degrades gracefully:
+
+```
+Amazon Product Data:
+  Tier 1: Rainforest API (best quality)
+  Tier 2: ScrapingDog API
+  Tier 3: Camoufox stealth browser
+  Tier 4: Direct HTTP with headers
+
+Amazon Reviews:
+  Tier 1: Rainforest Reviews API (100+ reviews)
+  Tier 2: ScrapingDog Reviews API
+  Tier 3: Product page scrape (8 reviews)
+
+Star Distribution:
+  → Amazon Rating Widget (FREE, no auth, 2000+ ratings!)
+
+Google Shopping:
+  Tier 1: SerpAPI (structured data)
+  Tier 2: Camoufox Google scrape (residential IPs)
+
+YouTube:
+  Tier 1: YouTube Data API v3
+  Tier 2: YouTube search page scrape
+
+Everything else:
+  → Direct HTTP (always free)
+```
 
 ---
 
-## 💰 Monetization
+## 🌍 Supported Marketplaces
 
-**Free Tier:**  
-- 10 analyses per day  
-- Amazon + Reddit only  
+| Marketplace | Product Data | Reviews | Price Compare |
+|-------------|:----------:|:-------:|:------------:|
+| 🇮🇳 Amazon.in | ✅ | ✅ | ✅ |
+| 🇺🇸 Amazon.com | ✅ | ✅ | ✅ |
+| 🇬🇧 Amazon.co.uk | ✅ | ✅ | ✅ |
+| 🇩🇪 Amazon.de | ✅ | ✅ | ✅ |
+| More domains | ✅ | ✅ | ✅ |
 
-**Premium ($9.99/month):**  
-- Unlimited analyses  
-- All 10 features unlocked  
-- Priority support  
+---
 
-**Expected Revenue:** $500-2000/month
+## 🔒 Privacy & Security
+
+- **Your keys stay local** — never sent anywhere except the API providers you configure
+- **No tracking** — zero analytics, zero telemetry
+- **No data stored** — results are cached locally for performance only
+- **Open source** — audit every line of code yourself
 
 ---
 
 ## 🚀 Roadmap
 
-### Phase 1 (MVP - ✅ Complete)
-- [x] Amazon + Reddit + YouTube + Twitter scraping
-- [x] Fake review detection (pattern-based)
-- [x] Regret detector (temporal sentiment)
-- [x] Confidence scoring
-- [x] LLM summary & verdict
-
-### Phase 2 (Next 2 Weeks)
-- [ ] Price prediction (historical data + ML forecasting)
-- [ ] Coupon finder (auto-discover discount codes)
-- [ ] Alternative product recommendations
-
-### Phase 3 (Month 2)
-- [ ] Battle Mode (two AI agents debate pros/cons)
-- [ ] Carbon footprint calculator
-- [ ] Ethics scoring (labor practices, sustainability)
+- [x] Multi-source data aggregation (10+ sources)
+- [x] Fake review detection (star distribution + keyword analysis)
+- [x] Price comparison across stores
+- [x] Coupon & cashback discovery
+- [x] YouTube video reviews
+- [x] Expert reviews (Wirecutter, RTINGS)
+- [x] AI verdict with confidence scoring
+- [x] Zero API key mode (works out of the box)
+- [x] Tiered fallback for every data source
+- [ ] Price drop prediction (ARIMA model)
 - [ ] Browser extension (Chrome/Firefox)
-
----
-
-## 🛠 Tech Stack
-
-- **Language:** Python 3.10+
-- **Framework:** FastAPI (Nextbase backend)
-- **Scraping:** httpx, BeautifulSoup4 (API-free)
-- **LLM:** OpenAI GPT-4 / Claude (user's key)
-- **Caching:** Redis (optional)
-
----
-
-## 📚 Documentation
-
-- **[Deployment Guide](docs/DEPLOYMENT.md)** — Complete setup instructions
-- **[Quick Start](docs/QUICKSTART.md)** — 3-step quickstart
-- **[Architecture](docs/ARCHITECTURE.md)** — Technical deep dive
+- [ ] Flipkart support
+- [ ] Battle Mode (two AIs debate pros/cons)
+- [ ] Telegram bot integration
+- [ ] Historical price alerts
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) first.
+Contributions welcome! Open an issue first to discuss what you'd like to change.
 
-1. Fork the repo
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-## 🌟 Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=sujalmanpara/shopping-agent-marketplace&type=Date)](https://star-history.com/#sujalmanpara/shopping-agent-marketplace&Date)
+```bash
+git clone https://github.com/sujalmanpara/shopping-agent-marketplace.git
+cd shopping-agent-marketplace
+pip install -r requirements.txt
+# Make your changes
+# Submit a PR
+```
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🔗 Links
-
-- **Nextbase Marketplace:** https://agents.nextbase.solutions
-- **OpenClaw:** https://openclaw.ai
-- **Issues:** [GitHub Issues](https://github.com/sujalmanpara/shopping-agent-marketplace/issues)
-- **Twitter:** [@sujalmanpara](https://twitter.com/sujalmanpara)
-
----
-
-## 📧 Support
-
-For questions or support:
-- Open a [GitHub Issue](https://github.com/sujalmanpara/shopping-agent-marketplace/issues)
-- Contact: sujal@nextbase.solutions
+MIT License — use it however you want. Attribution appreciated but not required.
 
 ---
 
 <div align="center">
 
-**Built with ❤️ for the Nextbase Agent Marketplace**
+### ⭐ If this saved you from a bad purchase, star the repo!
 
-[⭐ Star this repo](https://github.com/sujalmanpara/shopping-agent-marketplace) • [🐛 Report Bug](https://github.com/sujalmanpara/shopping-agent-marketplace/issues) • [💡 Request Feature](https://github.com/sujalmanpara/shopping-agent-marketplace/issues)
+**[⭐ Star](https://github.com/sujalmanpara/shopping-agent-marketplace)** · **[🐛 Report Bug](https://github.com/sujalmanpara/shopping-agent-marketplace/issues)** · **[💡 Request Feature](https://github.com/sujalmanpara/shopping-agent-marketplace/issues)**
+
+Built by [@sujalmanpara](https://github.com/sujalmanpara)
 
 </div>
