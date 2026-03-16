@@ -406,6 +406,69 @@ def get_fake_review_summary(reviews: List[Dict], fake_analysis: Dict, source_res
     return result
 
 
+def analyze_star_distribution(star_dist: Dict) -> Dict:
+    """
+    Analyze star distribution for fake review patterns.
+    Uses Amazon's hidden rating widget data (free, no auth).
+    
+    Natural products: roughly bell-curved or left-skewed
+    Fake farms: J-shaped (90%+ 5-star with 5-10% 1-star, nothing in between)
+    Incentivized: heavily 4-5 star with almost no 1-3 star
+    
+    Returns: {risk, pattern, details, j_score}
+    """
+    if not star_dist:
+        return {"risk": "unknown", "pattern": "no_data", "details": "No star distribution data available"}
+
+    s5 = star_dist.get("5_star", 0)
+    s4 = star_dist.get("4_star", 0)
+    s3 = star_dist.get("3_star", 0)
+    s2 = star_dist.get("2_star", 0)
+    s1 = star_dist.get("1_star", 0)
+
+    total = s5 + s4 + s3 + s2 + s1
+    if total == 0:
+        return {"risk": "unknown", "pattern": "no_data"}
+
+    # J-shape score: high 5-star + high 1-star + low middle = fake farm
+    middle = s2 + s3 + s4
+    j_score = 0
+    if s5 > 70 and s1 > 8 and middle < 20:
+        j_score = min(100, (s5 - 60) + (s1 * 2) + (20 - middle))
+    elif s5 > 80 and middle < 15:
+        j_score = min(100, (s5 - 70) * 2)
+
+    # Determine pattern
+    if j_score > 50:
+        pattern = "j_shaped"
+        risk = "high"
+        details = f"⚠️ J-shaped distribution (5★={s5}%, 1★={s1}%, middle={middle}%) — classic fake review pattern"
+    elif s5 > 80 and s1 < 5:
+        pattern = "suspiciously_positive"
+        risk = "medium"
+        details = f"🟡 Unusually positive (5★={s5}%, 1★={s1}%) — could be incentivized reviews"
+    elif s5 > 50 and (s4 + s5) > 75:
+        pattern = "positive_skew"
+        risk = "low"
+        details = f"✅ Positive but natural skew (5★={s5}%, 4★={s4}%)"
+    elif s1 > 30:
+        pattern = "highly_negative"
+        risk = "low"
+        details = f"📉 Many unhappy buyers (1★={s1}%) — likely genuine complaints"
+    else:
+        pattern = "natural"
+        risk = "low"
+        details = f"✅ Natural distribution (5★={s5}%, 4★={s4}%, 3★={s3}%, 2★={s2}%, 1★={s1}%)"
+
+    return {
+        "risk": risk,
+        "pattern": pattern,
+        "details": details,
+        "j_score": j_score,
+        "distribution": star_dist,
+    }
+
+
 def _detect_review_patterns(reviews: List[Dict], fake_analysis: Dict) -> List[str]:
     """Detect common suspicious patterns in reviews."""
     patterns = []

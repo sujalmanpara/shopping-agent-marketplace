@@ -22,7 +22,8 @@ from .api_layer import (
 from .analyzers import (
     analyze_fake_reviews, analyze_regret_pattern, calculate_confidence,
     get_fake_review_summary, analyze_review_timeline, analyze_price_benchmark,
-    analyze_review_quality, analyze_buy_timing, generate_price_alerts
+    analyze_review_quality, analyze_buy_timing, generate_price_alerts,
+    analyze_star_distribution
 )
 from .summarizer import generate_summary, format_beautiful_output
 from .coupon_sniper import find_coupons
@@ -173,6 +174,20 @@ async def execute(
             amazon_data["reviews"] = reviews
             yield sse_event("status", f"📝 Got {len(reviews)} total reviews for analysis")
 
+    # ── Step 3c: Fetch Amazon rating widget (FREE, no auth) ──
+    try:
+        from .api_layer import _fetch_amazon_rating_widget
+        rating_widget = await _fetch_amazon_rating_widget(asin, country)
+        if rating_widget:
+            amazon_data["rating_widget"] = rating_widget
+            # Enrich amazon_data with accurate rating info from widget
+            if rating_widget.get("average_rating"):
+                amazon_data["rating"] = rating_widget["average_rating"]
+            if rating_widget.get("total_ratings"):
+                amazon_data["review_count"] = rating_widget["total_ratings"]
+    except Exception:
+        rating_widget = None
+
     # ── Step 4: ML Analysis with cross-verification ──
     yield sse_event("status", "🕵️ Running fake review detection & cross-verification...")
     fake_analysis = analyze_fake_reviews(reviews)
@@ -194,6 +209,13 @@ async def execute(
 
     # Review Quality Score
     review_quality = analyze_review_quality(reviews)
+
+    # Star Distribution Analysis (from free Amazon widget)
+    star_dist_analysis = {}
+    if amazon_data.get("rating_widget", {}).get("star_distribution"):
+        star_dist_analysis = analyze_star_distribution(
+            amazon_data["rating_widget"]["star_distribution"]
+        )
 
     # ── Step 5: Price Prediction with context ──
     price_prediction = {}
@@ -275,6 +297,7 @@ async def execute(
         review_quality=review_quality,
         buy_timing=buy_timing,
         price_alerts=price_alerts,
+        star_distribution=star_dist_analysis,
     )
 
     yield sse_event("result", beautiful_output)

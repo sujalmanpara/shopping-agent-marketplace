@@ -483,6 +483,65 @@ async def _fetch_amazon_reviews_scrapingdog(
     return all_reviews
 
 
+async def _fetch_amazon_rating_widget(asin: str, country: str = "IN") -> Optional[Dict]:
+    """
+    Fetch Amazon rating breakdown via hidden widget endpoint.
+    NO API KEY, NO LOGIN, FREE, UNLIMITED!
+    
+    Returns: average rating, total ratings, star distribution (5★→1★ percentages).
+    This data alone is powerful for fake detection:
+    - Natural products: bell curve distribution
+    - Fake farms: 90%+ 5-star + some 1-star (J-shaped)
+    """
+    import re
+    domain = "amazon.in" if country == "IN" else "amazon.com"
+    url = f"https://www.{domain}/gp/customer-reviews/widgets/average-customer-review/popover/ref=dpx_acr_pop_"
+    params = {"contextId": "dpx", "asin": asin}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Encoding": "gzip, deflate, br",
+    }
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            resp = await client.get(url, params=params, headers=headers)
+            if resp.status_code != 200:
+                return None
+
+            html = resp.text
+            if len(html) < 100:
+                return None
+
+            # Parse rating
+            avg_match = re.findall(r'([\d.]+) out of 5', html)
+            avg_rating = float(avg_match[0]) if avg_match else None
+
+            # Parse total ratings
+            total_match = re.findall(r'([\d,]+) global ratings?', html)
+            total_ratings = int(total_match[0].replace(",", "")) if total_match else None
+
+            # Parse star distribution (percentages from progress bars)
+            star_pcts = re.findall(r'aria-valuenow="(\d+)"', html)
+            star_distribution = {}
+            if len(star_pcts) >= 5:
+                star_distribution = {
+                    "5_star": int(star_pcts[0]),
+                    "4_star": int(star_pcts[1]),
+                    "3_star": int(star_pcts[2]),
+                    "2_star": int(star_pcts[3]),
+                    "1_star": int(star_pcts[4]),
+                }
+
+            return {
+                "average_rating": avg_rating,
+                "total_ratings": total_ratings,
+                "star_distribution": star_distribution,
+                "source": "amazon_rating_widget",
+            }
+        except Exception:
+            return None
+
+
 async def _fetch_amazon_camoufox(asin: str, token: str, port: int = 9222, country: str = "IN") -> Optional[Dict]:
     """
     Fetch Amazon product data via Camoufox stealth browser (local server on port 9222).

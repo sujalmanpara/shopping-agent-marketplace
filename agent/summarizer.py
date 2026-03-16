@@ -355,6 +355,7 @@ def format_beautiful_output(
     review_quality: Dict = None,
     buy_timing: Dict = None,
     price_alerts: Dict = None,
+    star_distribution: Dict = None,
 ) -> str:
     """Premium formatted output — designed to look worth $50."""
     output = []
@@ -545,6 +546,22 @@ def format_beautiful_output(
         if patterns:
             output.append(f"  🔍 Patterns: {', '.join(patterns[:3])}")
     output.append("")
+
+    # ── ⭐ Star Distribution Analysis ──
+    if star_distribution and star_distribution.get("distribution"):
+        sd = star_distribution
+        dist = sd["distribution"]
+        output.append("  ⭐ STAR DISTRIBUTION")
+        output.append("  " + "─" * 40)
+        # Visual bar chart
+        for star in [5, 4, 3, 2, 1]:
+            pct = dist.get(f"{star}_star", 0)
+            bar_len = pct // 5  # Scale to max ~20 chars
+            bar = "█" * bar_len + "░" * (20 - bar_len)
+            output.append(f"  {star}★ {bar} {pct}%")
+        # Analysis result
+        output.append(f"  {sd.get('details', '')}")
+        output.append("")
 
     # ── 📅 Review Timeline ──
     if timeline_analysis and timeline_analysis.get("risk") != "unknown":

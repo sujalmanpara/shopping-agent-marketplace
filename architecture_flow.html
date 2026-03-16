@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shopping Truth Agent — Architecture Flow</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0f1117;
+    color: #e2e8f0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    overflow-x: auto;
+  }
+  .canvas {
+    min-width: 1400px;
+    padding: 40px;
+    position: relative;
+  }
+  h1 {
+    text-align: center;
+    font-size: 22px;
+    color: #f8fafc;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+  }
+  .subtitle {
+    text-align: center;
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 48px;
+  }
+
+  /* ── LANE LABELS ── */
+  .lane-labels {
+    display: flex;
+    gap: 0;
+    margin-bottom: 0;
+    padding-left: 0;
+  }
+
+  /* ── FLOW GRID ── */
+  .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* ── ROW ── */
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 0;
+    position: relative;
+  }
+
+  /* STEP LABEL */
+  .step-label {
+    width: 80px;
+    min-width: 80px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #475569;
+    text-align: right;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding-right: 8px;
+  }
+
+  /* ── NODE ── */
+  .node {
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    position: relative;
+    cursor: default;
+    transition: transform 0.15s, box-shadow 0.15s;
+    white-space: nowrap;
+  }
+  .node:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .node .icon { font-size: 16px; margin-right: 6px; }
+  .node .sub  { font-size: 10px; font-weight: 400; color: #94a3b8; display: block; margin-top: 2px; }
+
+  /* Node color variants */
+  .node-input    { background: #1e293b; border: 2px solid #3b82f6; color: #93c5fd; }
+  .node-core     { background: #1a1a2e; border: 2px solid #6366f1; color: #a5b4fc; }
+  .node-source   { background: #0d2137; border: 2px solid #0ea5e9; color: #7dd3fc; }
+  .node-source.live  { border-color: #22c55e; color: #86efac; }
+  .node-source.dead  { border-color: #ef4444; color: #fca5a5; opacity: 0.7; }
+  .node-analyze  { background: #1a1a0a; border: 2px solid #eab308; color: #fde047; }
+  .node-price    { background: #0a1a12; border: 2px solid #10b981; color: #6ee7b7; }
+  .node-coupon   { background: #1a0a1a; border: 2px solid #a855f7; color: #d8b4fe; }
+  .node-llm      { background: #1a0a0a; border: 2px solid #f97316; color: #fdba74; }
+  .node-output   { background: #0a1a0a; border: 2px solid #22c55e; color: #86efac; }
+  .node-file     { background: #1e1e2e; border: 1px dashed #475569; color: #94a3b8; font-size: 11px; }
+
+  /* ── ARROWS ── */
+  .arrow {
+    color: #475569;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .arrow-down {
+    text-align: center;
+    color: #475569;
+    font-size: 18px;
+    line-height: 1;
+    padding: 4px 0;
+  }
+  .arrow-label {
+    font-size: 10px;
+    color: #64748b;
+    margin-left: 4px;
+  }
+
+  /* ── PARALLEL GROUP ── */
+  .parallel-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .parallel-bracket {
+    font-size: 28px;
+    color: #334155;
+    align-self: center;
+    line-height: 1;
+  }
+  .parallel-label {
+    font-size: 10px;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    font-weight: 700;
+  }
+
+  /* ── SECTION DIVIDER ── */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #1e293b, transparent);
+    margin: 20px 0;
+  }
+
+  /* ── CONNECTOR LINES ── */
+  svg.connectors {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  /* ── BADGE ── */
+  .badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: 6px;
+  }
+  .badge-green  { background: #14532d; color: #86efac; }
+  .badge-red    { background: #450a0a; color: #fca5a5; }
+  .badge-yellow { background: #422006; color: #fde047; }
+  .badge-blue   { background: #0c2a4a; color: #7dd3fc; }
+
+  /* ── LEGEND ── */
+  .legend {
+    margin-top: 40px;
+    padding: 20px;
+    background: #1e293b;
+    border-radius: 12px;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: #94a3b8;
+  }
+  .legend-dot {
+    width: 12px; height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* ── MAIN LAYOUT ── */
+  .main-flow {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+
+  .step-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    width: 100%;
+    padding: 10px 0;
+  }
+
+  .step-num {
+    width: 90px;
+    min-width: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 16px;
+  }
+  .step-num-circle {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 800;
+    background: #1e293b;
+    border: 2px solid #334155;
+    color: #94a3b8;
+  }
+
+  .step-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .connector-col {
+    width: 90px;
+    min-width: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .vert-line {
+    width: 2px;
+    height: 30px;
+    background: #334155;
+    margin: 0 auto;
+  }
+
+  /* FILE TAG */
+  .file-tag {
+    font-size: 10px;
+    color: #475569;
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-family: monospace;
+  }
+
+  /* SOURCE GRID */
+  .source-grid {
+    display: grid;
+    grid-template-columns: repeat(4, auto);
+    gap: 8px;
+  }
+
+  /* ANALYSIS ROW */
+  .analysis-cols {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .analysis-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .col-title {
+    font-size: 10px;
+    font-weight: 700;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 4px 8px;
+    background: #0f172a;
+    border-radius: 4px;
+    text-align: center;
+  }
+
+  /* OUTPUT SECTIONS */
+  .output-sections {
+    display: flex;
+    gap: 10px;
+  }
+  .output-section {
+    background: #0a1a0a;
+    border: 1px solid #166534;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 11px;
+  }
+  .output-section .title {
+    font-weight: 700;
+    color: #4ade80;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .output-section ul {
+    list-style: none;
+    color: #86efac;
+    line-height: 1.7;
+  }
+
+  .data-flow-label {
+    font-size: 10px;
+    color: #334155;
+    font-style: italic;
+    white-space: nowrap;
+  }
+
+  .plus-separator {
+    color: #334155;
+    font-size: 14px;
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <h1>🛒 Shopping Truth Agent — Architecture Flow</h1>
+  <p class="subtitle">Complete data flow from user URL to final verdict</p>
+
+  <div class="main-flow">
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- STEP 1: INPUT -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div class="step-row">
+      <div class="step-num"><div class="step-num-circle">1</div></div>
+      <div class="step-content">
+        <div class="node node-input">
+          <span class="icon">👤</span>User Input
+          <span class="sub">amazon.in/dp/B0BX4L9143 or any Amazon URL/ASIN</span>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node node-core">
+          <span class="icon">⚙️</span>executor.py
+          <span class="sub">Entry point — orchestrates entire pipeline</span>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node node-core">
+          <span class="icon">🔍</span>api_layer.py · detect_platform() + extract_asin()
+          <span class="sub">platform: "amazon_in" | asin: "B0BX4L9143" | country: "IN"</span>
+        </div>
+        <div class="file-tag">executor.py</div>
+        <div class="file-tag">api_layer.py</div>
+      </div>
+    </div>
+
+    <!-- connector -->
+    <div class="step-row" style="padding:0"><div class="connector-col"><div class="vert-line"></div></div><div style="padding-left:16px;font-size:10px;color:#334155">ASIN extracted → fetch product details</div></div>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- STEP 2: AMAZON FIRST -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div class="step-row">
+      <div class="step-num"><div class="step-num-circle">2</div></div>
+      <div class="step-content">
+        <div class="node node-source live">
+          <span class="icon">📦</span>fetch_amazon_product()
+          <span class="sub">PA-API (paid) → HTTP fallback (free) · Returns: title, price, rating, reviews[]</span>
+        </div>
+        <div style="margin-left:16px;font-size:11px;color:#475569">
+          <div>Output used by ALL other steps ↓</div>
+          <div style="color:#22c55e;font-size:10px;margin-top:2px">title → search query &nbsp;|&nbsp; reviews[] → ML input &nbsp;|&nbsp; price → ARIMA + coupon</div>
+        </div>
+        <div class="file-tag">api_layer.py</div>
+      </div>
+    </div>
+
+    <!-- connector -->
+    <div class="step-row" style="padding:0"><div class="connector-col"><div class="vert-line"></div></div><div style="padding-left:16px;font-size:10px;color:#334155">product title → passed as search query to all 8 sources</div></div>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- STEP 3: PARALLEL FETCH -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div class="step-row">
+      <div class="step-num"><div class="step-num-circle">3</div></div>
+      <div class="step-content" style="flex-direction:column;align-items:flex-start;gap:8px">
+        <div style="font-size:11px;color:#64748b;font-weight:600;">⚡ asyncio.gather() — All sources fetched in parallel (~5 sec total)</div>
+        <div class="source-grid">
+
+          <div class="node node-source live" style="min-width:160px">
+            <span class="icon">📺</span>YouTube API
+            <span class="sub">Video reviews · views/likes</span>
+            <span class="badge badge-green">LIVE ✓</span>
+          </div>
+
+          <div class="node node-source dead" style="min-width:160px">
+            <span class="icon">💬</span>Reddit PRAW
+            <span class="sub">Community discussions</span>
+            <span class="badge badge-red">NEEDS KEY</span>
+          </div>
+
+          <div class="node node-source dead" style="min-width:160px">
+            <span class="icon">📊</span>Keepa API
+            <span class="sub">6mo price history</span>
+            <span class="badge badge-red">€15/mo</span>
+          </div>
+
+          <div class="node node-source dead" style="min-width:160px">
+            <span class="icon">🛍️</span>Google Shopping
+            <span class="sub">Cross-store price compare</span>
+            <span class="badge badge-red">NEEDS KEY</span>
+          </div>
+
+          <div class="node node-source live" style="min-width:160px">
+            <span class="icon">🏆</span>Wirecutter
+            <span class="sub">Expert picks / Top Pick</span>
+            <span class="badge badge-green">LIVE ✓</span>
+          </div>
+
+          <div class="node node-source live" style="min-width:160px">
+            <span class="icon">⭐</span>RTINGS
+            <span class="sub">Expert test scores</span>
+            <span class="badge badge-green">LIVE ✓</span>
+          </div>
+
+          <div class="node node-source live" style="min-width:160px">
+            <span class="icon">🔒</span>Trustpilot
+            <span class="sub">Brand trust score</span>
+            <span class="badge badge-green">LIVE ✓</span>
+          </div>
+
+          <div class="node node-source dead" style="min-width:160px">
+            <span class="icon">🔎</span>ReviewMeta
+            <span class="sub">Independent fake review %</span>
+            <span class="badge badge-yellow">TIMEOUT</span>
+          </div>
+
+        </div>
+        <div class="node node-source" style="background:#0d1a2e;border-color:#0284c7">
+          <span class="icon">🔀</span>fetch_alternatives() — runs in same parallel batch
+          <span class="sub">Google Shopping → finds 3 cheaper/better alternatives</span>
+        </div>
+        <div class="file-tag">api_layer.py</div>
+      </div>
+    </div>
+
+    <!-- connector -->
+    <div class="step-row" style="padding:0"><div class="connector-col"><div class="vert-line"></div></div><div style="padding-left:16px;font-size:10px;color:#334155">source_results{} → split into 3 parallel analysis streams</div></div>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- STEP 4+5+6: PARALLEL ANALYSIS -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div class="step-row">
+      <div class="step-num"><div class="step-num-circle" style="border-color:#eab308;color:#fde047">4-6</div></div>
+      <div class="step-content" style="align-items:flex-start">
+        <div style="font-size:11px;color:#64748b;font-weight:600;width:100%;margin-bottom:4px;">⚡ asyncio.gather() — 3 analysis modules run in parallel</div>
+
+        <div class="analysis-cols">
+
+          <!-- ML ANALYSIS -->
+          <div class="analysis-col">
+            <div class="col-title">🕵️ ML Analysis</div>
+            <div class="node node-analyze" style="min-width:200px">
+              <span class="icon">🧠</span>analyze_fake_reviews()
+              <span class="sub">XGBoost v2.0 · 95.2% accuracy</span>
+              <span class="sub">Input: reviews[] from Amazon</span>
+            </div>
+            <div style="font-size:11px;color:#475569;padding:4px 8px">↓</div>
+            <div class="node node-analyze" style="min-width:200px">
+              <span class="icon">🔄</span>get_fake_review_summary()
+              <span class="sub">Cross-verify with ReviewMeta</span>
+            </div>
+            <div style="font-size:11px;color:#475569;padding:4px 8px">↓</div>
+            <div class="node node-analyze" style="min-width:200px;opacity:0.8">
+              <span class="icon">📉</span>analyze_regret_pattern()
+              <span class="sub">Detects post-purchase regret signals</span>
+            </div>
+            <div style="font-size:11px;color:#475569;padding:4px 8px">↓</div>
+            <div class="node node-analyze" style="min-width:200px;opacity:0.8">
+              <span class="icon">🎯</span>calculate_confidence()
+              <span class="sub">Sufficiency + Agreement + Quality</span>
+            </div>
+            <div class="file-tag" style="margin-top:4px">analyzers.py · features.py</div>
+          </div>
+
+          <div style="font-size:24px;color:#1e293b;align-self:center;padding:0 4px">|</div>
+
+          <!-- PRICE PREDICTION -->
+          <div class="analysis-col">
+            <div class="col-title">📈 Price Prediction</div>
+            <div class="node node-price" style="min-width:200px">
+              <span class="icon">📊</span>ARIMAPricePredictor
+              <span class="sub">predict_with_context()</span>
+              <span class="sub">Input: Keepa price history[]</span>
+            </div>
+            <div style="font-size:11px;color:#475569;padding:4px 8px">↓</div>
+            <div class="node node-price" style="min-width:200px;opacity:0.8">
+              <span class="icon">📅</span>Sale Calendar Overlay
+              <span class="sub">8 IN + 6 US sales hardcoded</span>
+              <span class="sub">Holi, Diwali, GIF, BBD…</span>
+            </div>
+            <div style="font-size:11px;color:#475569;padding:4px 8px">↓</div>
+            <div class="node node-price" style="min-width:200px;background:#0a1410;border-color:#059669">
+              <span class="icon">💡</span>OUTPUT
+              <span class="sub">predicted_price · drop_prob%</span>
+              <span class="sub">best_action: BUY/WAIT/AVOID</span>
+              <span class="sub">upcoming_sales[] with dates</span>
+            </div>
+            <div class="file-tag" style="margin-top:4px">price_predictor_arima.py</div>
+          </div>
+
+          <div style="font-size:24px;color:#1e293b;align-self:center;padding:0 4px">|</div>
+
+          <!-- COUPON SNIPER -->
+          <div class="analysis-col">
+            <div class="col-title">🎯 Coupon Sniper</div>
+            <div class="node node-coupon" style="min-width:200px">
+              <span class="icon">🔍</span>find_coupons()
+              <span class="sub">detect store from URL</span>
+              <span class="sub">Input: ASIN + price + country</span>
+            </div>
+            <div style="font-size:11px;color:#475569;padding:4px 8px">↓</div>
+            <div class="node node-coupon" style="min-width:200px;opacity:0.8">
+              <span class="icon">💳</span>Credit Card Matcher
+              <span class="sub">23 IN cards · 7 US cards</span>
+              <span class="sub">Store-specific best card</span>
+            </div>
+            <div style="font-size:11px;color:#475569;padding:4px 8px">↓</div>
+            <div class="node node-coupon" style="min-width:200px;opacity:0.8">
+              <span class="icon">📱</span>UPI / Wallet Offers
+              <span class="sub">Amazon Pay · PhonePe · Paytm</span>
+              <span class="sub">CRED · Flipkart Pay Later</span>
+            </div>
+            <div style="font-size:11px;color:#475569;padding:4px 8px">↓</div>
+            <div class="node node-coupon" style="min-width:200px;background:#14001a;border-color:#9333ea">
+              <span class="icon">🏆</span>Best Combo Calculator
+              <span class="sub">Max savings stacking strategy</span>
+              <span class="sub">cashback + card + coupon</span>
+            </div>
+            <div class="file-tag" style="margin-top:4px">coupon_sniper.py</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- connector -->
+    <div class="step-row" style="padding:0"><div class="connector-col"><div class="vert-line"></div></div><div style="padding-left:16px;font-size:10px;color:#334155">all analysis outputs → combined into single context object → LLM</div></div>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- STEP 7: LLM VERDICT -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div class="step-row">
+      <div class="step-num"><div class="step-num-circle" style="border-color:#f97316;color:#fdba74">7</div></div>
+      <div class="step-content">
+        <div class="node node-llm" style="min-width:320px">
+          <span class="icon">🤖</span>summarizer.generate_summary() → GPT-4o-mini
+          <span class="sub">Temp: 0.0 · Schema enforced · Injection-protected prompt</span>
+          <span class="sub">Input: product + fake% + price prediction + alternatives + coupons + expert scores</span>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node node-llm" style="background:#1a0800;border-color:#dc2626;min-width:240px">
+          <span class="icon">⚖️</span>Verdict Parser
+          <span class="sub">Priority: WAIT → AVOID → BUY</span>
+          <span class="sub">Extracts 2-3 sentence verdict</span>
+        </div>
+        <div class="file-tag">summarizer.py</div>
+        <div class="file-tag">app.core.llm</div>
+      </div>
+    </div>
+
+    <!-- connector -->
+    <div class="step-row" style="padding:0"><div class="connector-col"><div class="vert-line"></div></div><div style="padding-left:16px;font-size:10px;color:#334155">verdict + all data → format_beautiful_output()</div></div>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- STEP 8: OUTPUT -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div class="step-row">
+      <div class="step-num"><div class="step-num-circle" style="border-color:#22c55e;color:#86efac">8</div></div>
+      <div class="step-content" style="align-items:flex-start;flex-direction:column;gap:8px">
+        <div style="font-size:11px;color:#64748b;font-weight:600;">format_beautiful_output() — Two-tier structured output</div>
+        <div class="output-sections">
+
+          <div class="output-section" style="min-width:220px">
+            <div class="title">📋 TL;DR (3 lines)</div>
+            <ul>
+              <li>📦 Product name + price</li>
+              <li>⏳ BUY / WAIT / AVOID verdict</li>
+              <li>🟢 Confidence | Fake risk | Sources</li>
+            </ul>
+          </div>
+
+          <div class="output-section" style="min-width:220px">
+            <div class="title">📊 Full Analysis</div>
+            <ul>
+              <li>📊 Data Sources (9/9 + latency)</li>
+              <li>🕵️ Fake Review Analysis</li>
+              <li>🎯 Confidence Score</li>
+              <li>📈 Price Prediction (ARIMA)</li>
+              <li>📅 Upcoming Sales calendar</li>
+            </ul>
+          </div>
+
+          <div class="output-section" style="min-width:220px">
+            <div class="title">💰 Savings Section</div>
+            <ul>
+              <li>🔍 Price Comparison</li>
+              <li>💸 Cashback platforms</li>
+              <li>📱 UPI &amp; Wallet offers</li>
+              <li>💳 Best credit cards</li>
+              <li>🏆 Best combo (max savings)</li>
+            </ul>
+          </div>
+
+          <div class="output-section" style="min-width:180px">
+            <div class="title">🤖 Verdict</div>
+            <ul>
+              <li>🤖 AI Verdict (2-3 lines)</li>
+              <li>💡 Quick Actions (3 steps)</li>
+              <li>🔀 Alternatives (3 picks)</li>
+            </ul>
+          </div>
+
+        </div>
+        <div class="file-tag">summarizer.py</div>
+      </div>
+    </div>
+
+    <!-- connector -->
+    <div class="step-row" style="padding:0"><div class="connector-col"><div class="vert-line"></div></div><div style="padding-left:16px;font-size:10px;color:#334155">SSE stream → Nextbase → rendered to user</div></div>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- STEP 9: DELIVERY -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div class="step-row">
+      <div class="step-num"><div class="step-num-circle" style="border-color:#3b82f6;color:#93c5fd">→</div></div>
+      <div class="step-content">
+        <div class="node node-input" style="background:#0c1a3a">
+          <span class="icon">📡</span>SSE Stream
+          <span class="sub">Real-time status events during analysis</span>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node node-input" style="background:#0c1a3a">
+          <span class="icon">🏗️</span>Nextbase Framework
+          <span class="sub">app.core.llm · app.core.sse · app.core.config</span>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node node-input" style="background:#0c2a4a;border-color:#22c55e">
+          <span class="icon">✅</span>User sees verdict
+          <span class="sub">TL;DR + Full Analysis in ~8-12 seconds</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- LEGEND + FILE MAP -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="divider" style="margin-top:40px"></div>
+
+  <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:24px">
+
+    <!-- LEGEND -->
+    <div style="flex:1;min-width:300px">
+      <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px">Legend</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>User Input / Framework</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#6366f1"></div>Core orchestration</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Live data source</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Needs API key</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#eab308"></div>ML analysis</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div>Price prediction</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div>Coupon/savings</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div>LLM/AI verdict</div>
+      </div>
+    </div>
+
+    <!-- FILE MAP -->
+    <div style="flex:1;min-width:300px">
+      <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px">File Map</div>
+      <div style="background:#1e293b;border-radius:12px;padding:16px;font-size:11px;line-height:2;font-family:monospace">
+        <div><span style="color:#6366f1">executor.py</span> <span style="color:#475569">← entry point, orchestrates all steps</span></div>
+        <div><span style="color:#0ea5e9">api_layer.py</span> <span style="color:#475569">← 9 data sources, SQLite cache</span></div>
+        <div><span style="color:#eab308">analyzers.py</span> <span style="color:#475569">← ML fake detect, regret, confidence</span></div>
+        <div><span style="color:#eab308">features.py</span> <span style="color:#475569">← XGBoost feature extractors (v2.0)</span></div>
+        <div><span style="color:#10b981">price_predictor_arima.py</span> <span style="color:#475569">← ARIMA + sales</span></div>
+        <div><span style="color:#a855f7">coupon_sniper.py</span> <span style="color:#475569">← coupons, 30 cards, UPI/wallets</span></div>
+        <div><span style="color:#f97316">summarizer.py</span> <span style="color:#475569">← LLM verdict + output formatter</span></div>
+        <div><span style="color:#94a3b8">constants.py</span> <span style="color:#475569">← weights, TTLs, sale calendar</span></div>
+        <div><span style="color:#94a3b8">agent/models/</span> <span style="color:#475569">← XGBoost .joblib files (v2.0)</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- API STATUS TABLE -->
+  <div style="margin-top:24px">
+    <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px">API Status</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div style="background:#0a1a0a;border:1px solid #166534;border-radius:8px;padding:10px 16px;font-size:11px">
+        <div style="color:#4ade80;font-weight:700;margin-bottom:4px">✅ LIVE NOW (5/9)</div>
+        <div style="color:#86efac;line-height:1.8">Amazon (HTTP) · YouTube · Wirecutter · RTINGS · Trustpilot</div>
+      </div>
+      <div style="background:#1a0a0a;border:1px solid #7f1d1d;border-radius:8px;padding:10px 16px;font-size:11px">
+        <div style="color:#f87171;font-weight:700;margin-bottom:4px">❌ NEEDS KEY (4/9)</div>
+        <div style="color:#fca5a5;line-height:1.8">Reddit (free PRAW) · Keepa (€15/mo) · SerpAPI ($50/mo) · Amazon PA-API (affiliate)</div>
+      </div>
+      <div style="background:#0a0a1a;border:1px solid #1e3a5f;border-radius:8px;padding:10px 16px;font-size:11px">
+        <div style="color:#60a5fa;font-weight:700;margin-bottom:4px">⏱️ TOTAL TIME</div>
+        <div style="color:#93c5fd;line-height:1.8">~8-12 seconds end-to-end · SSE streams status updates live</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
