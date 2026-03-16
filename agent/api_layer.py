@@ -354,6 +354,71 @@ async def _fetch_amazon_scrapingdog(asin: str, api_key: str, country: str = "IN"
             "brand": data.get("brand", ""),
         }
 
+async def _fetch_amazon_reviews_scrapingdog(
+    asin: str, api_key: str, country: str = "IN", max_pages: int = 10
+) -> List[Dict]:
+    """
+    Fetch bulk Amazon reviews via ScrapingDog Reviews API.
+    Dedicated endpoint: /amazon/reviews — returns ~10 reviews per page.
+    Paginate up to max_pages (default 10 = ~100 reviews).
+    Each page costs 1 API credit.
+    """
+    domain = "amazon.in" if country == "IN" else "amazon.com"
+    domain_code = "in" if country == "IN" else "com"
+    all_reviews = []
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        for page in range(1, max_pages + 1):
+            params = {
+                "api_key": api_key,
+                "asin": asin,
+                "domain": domain_code,
+                "page": str(page),
+            }
+            try:
+                resp = await client.get(
+                    "https://api.scrapingdog.com/amazon/reviews", params=params
+                )
+                if resp.status_code != 200:
+                    break
+
+                data = resp.json()
+                reviews = data.get("customer_reviews", [])
+                if not reviews:
+                    break  # No more reviews
+
+                for r in reviews:
+                    # Parse rating — could be "5.0 out of 5 stars" or just "5.0"
+                    rating_raw = str(r.get("rating", "0"))
+                    try:
+                        rating = float(rating_raw.split(" ")[0])
+                    except (ValueError, IndexError):
+                        rating = 0.0
+
+                    # Check verified purchase
+                    extension = r.get("extension", "")
+                    verified = "verified" in str(extension).lower()
+
+                    all_reviews.append({
+                        "body": r.get("review", r.get("review_text", "")),
+                        "rating": rating,
+                        "title": r.get("title", r.get("review_title", "")),
+                        "date": r.get("date", ""),
+                        "author": r.get("user", r.get("customer_name", "")),
+                        "verified": verified,
+                        "source": "scrapingdog_reviews_api",
+                    })
+
+                # If we got fewer than 8 reviews, probably last page
+                if len(reviews) < 8:
+                    break
+
+            except Exception:
+                break  # Network error, stop pagination
+
+    return all_reviews
+
+
 async def _fetch_amazon_camoufox(asin: str, token: str, port: int = 9222, country: str = "IN") -> Optional[Dict]:
     """
     Fetch Amazon product data via Camoufox stealth browser (local server on port 9222).

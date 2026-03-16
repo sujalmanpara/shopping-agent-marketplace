@@ -133,11 +133,30 @@ async def execute(
 
     yield sse_event("status", f"✅ {summary['succeeded']}/{summary['total']} sources responded")
 
+    # ── Step 3b: Fetch bulk reviews via ScrapingDog Reviews API ──
+    scrapingdog_key = (keys or {}).get("SCRAPINGDOG_API_KEY")
+    reviews = amazon_data.get("reviews", [])
+    if scrapingdog_key and len(reviews) < 20:
+        yield sse_event("status", "📝 Fetching bulk reviews via ScrapingDog (up to 100 reviews)...")
+        try:
+            from .api_layer import _fetch_amazon_reviews_scrapingdog
+            bulk_reviews = await _fetch_amazon_reviews_scrapingdog(
+                asin, scrapingdog_key, country, max_pages=10
+            )
+            if bulk_reviews:
+                # Merge: keep existing + add new unique reviews (dedupe by body[:50])
+                existing_bodies = {r.get("body", "")[:50] for r in reviews}
+                for br in bulk_reviews:
+                    if br.get("body", "")[:50] not in existing_bodies:
+                        reviews.append(br)
+                        existing_bodies.add(br.get("body", "")[:50])
+                amazon_data["reviews"] = reviews
+                yield sse_event("status", f"📝 Got {len(reviews)} total reviews for analysis")
+        except Exception as e:
+            yield sse_event("status", f"⚠️ Bulk reviews fetch failed: {str(e)[:80]}")
+
     # ── Step 4: ML Analysis with cross-verification ──
     yield sse_event("status", "🕵️ Running fake review detection & cross-verification...")
-
-    # Use reviews from Amazon data for fake review analysis
-    reviews = amazon_data.get("reviews", [])
     fake_analysis = analyze_fake_reviews(reviews)
     regret_analysis = analyze_regret_pattern(reviews)
     confidence = calculate_confidence(all_results)

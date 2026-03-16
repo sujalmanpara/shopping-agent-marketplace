@@ -391,7 +391,17 @@ def get_fake_review_summary(reviews: List[Dict], fake_analysis: Dict, source_res
     elif cv.get("agreement") == "AGREE_CLEAN":
         parts.append("✅ Both AI and ReviewMeta agree reviews look genuine")
 
+    # Add review count context
+    review_count = len(reviews)
+    if review_count >= 50:
+        parts.append(f"Based on {review_count} reviews (FULL analysis)")
+    elif review_count >= 10:
+        parts.append(f"Based on {review_count} reviews")
+    elif review_count > 0:
+        parts.append(f"Based on {review_count} reviews (LIMITED — fewer reviews = lower confidence)")
+
     result["summary_text"] = " | ".join(parts) if parts else "Insufficient data for detailed analysis"
+    result["review_count_analyzed"] = review_count
 
     return result
 
