@@ -1123,6 +1123,7 @@ async def fetch_google_shopping(product_name: str, country: str = "IN", keys: di
     
     if not serpapi_key:
         # Fallback: Camoufox Google Shopping scrape (stealth browser)
+        # Note: May fail from datacenter IPs (Google CAPTCHA). Works on residential.
         try:
             result = await _fetch_google_shopping_camoufox(product_name, country)
             if result:
@@ -1131,7 +1132,8 @@ async def fetch_google_shopping(product_name: str, country: str = "IN", keys: di
                 return _success("google_shopping_camoufox", result, latency)
         except Exception:
             pass
-        return _failure("google_shopping", "No SerpAPI key and Camoufox fallback failed.", 0)
+        latency = (time.time() - start) * 1000
+        return _failure("google_shopping", "No SerpAPI key. Camoufox fallback blocked by Google CAPTCHA (datacenter IP). Works on residential IPs or with SerpAPI key.", latency)
     
     try:
         url = "https://serpapi.com/search.json"
