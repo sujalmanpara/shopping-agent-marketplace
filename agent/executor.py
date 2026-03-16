@@ -133,27 +133,45 @@ async def execute(
 
     yield sse_event("status", f"✅ {summary['succeeded']}/{summary['total']} sources responded")
 
-    # ── Step 3b: Fetch bulk reviews via ScrapingDog Reviews API ──
-    scrapingdog_key = (keys or {}).get("SCRAPINGDOG_API_KEY")
+    # ── Step 3b: Fetch bulk reviews (Rainforest → ScrapingDog fallback) ──
     reviews = amazon_data.get("reviews", [])
-    if scrapingdog_key and len(reviews) < 20:
-        yield sse_event("status", "📝 Fetching bulk reviews via ScrapingDog (up to 100 reviews)...")
-        try:
-            from .api_layer import _fetch_amazon_reviews_scrapingdog
-            bulk_reviews = await _fetch_amazon_reviews_scrapingdog(
-                asin, scrapingdog_key, country, max_pages=10
-            )
-            if bulk_reviews:
-                # Merge: keep existing + add new unique reviews (dedupe by body[:50])
-                existing_bodies = {r.get("body", "")[:50] for r in reviews}
-                for br in bulk_reviews:
-                    if br.get("body", "")[:50] not in existing_bodies:
-                        reviews.append(br)
-                        existing_bodies.add(br.get("body", "")[:50])
-                amazon_data["reviews"] = reviews
-                yield sse_event("status", f"📝 Got {len(reviews)} total reviews for analysis")
-        except Exception as e:
-            yield sse_event("status", f"⚠️ Bulk reviews fetch failed: {str(e)[:80]}")
+    rainforest_key = (keys or {}).get("RAINFOREST_API_KEY")
+    scrapingdog_key = (keys or {}).get("SCRAPINGDOG_API_KEY")
+    bulk_reviews = []
+
+    if len(reviews) < 20:
+        # Tier 1: Rainforest Reviews API (best quality, paginated)
+        if rainforest_key and not bulk_reviews:
+            yield sse_event("status", "📝 Fetching bulk reviews via Rainforest API...")
+            try:
+                from .api_layer import _fetch_amazon_reviews_rainforest
+                bulk_reviews = await _fetch_amazon_reviews_rainforest(
+                    asin, rainforest_key, country, max_pages=10
+                )
+            except Exception as e:
+                yield sse_event("status", f"⚠️ Rainforest reviews failed: {str(e)[:80]}")
+
+        # Tier 2: ScrapingDog Reviews API (fallback)
+        if scrapingdog_key and len(bulk_reviews) < 10:
+            yield sse_event("status", "📝 Fetching bulk reviews via ScrapingDog...")
+            try:
+                from .api_layer import _fetch_amazon_reviews_scrapingdog
+                sd_reviews = await _fetch_amazon_reviews_scrapingdog(
+                    asin, scrapingdog_key, country, max_pages=10
+                )
+                bulk_reviews.extend(sd_reviews)
+            except Exception as e:
+                yield sse_event("status", f"⚠️ ScrapingDog reviews failed: {str(e)[:80]}")
+
+        # Merge bulk reviews with existing (dedupe by body[:50])
+        if bulk_reviews:
+            existing_bodies = {r.get("body", "")[:50] for r in reviews}
+            for br in bulk_reviews:
+                if br.get("body", "")[:50] not in existing_bodies:
+                    reviews.append(br)
+                    existing_bodies.add(br.get("body", "")[:50])
+            amazon_data["reviews"] = reviews
+            yield sse_event("status", f"📝 Got {len(reviews)} total reviews for analysis")
 
     # ── Step 4: ML Analysis with cross-verification ──
     yield sse_event("status", "🕵️ Running fake review detection & cross-verification...")

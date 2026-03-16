@@ -354,6 +354,70 @@ async def _fetch_amazon_scrapingdog(asin: str, api_key: str, country: str = "IN"
             "brand": data.get("brand", ""),
         }
 
+async def _fetch_amazon_reviews_rainforest(
+    asin: str, api_key: str, country: str = "IN", max_pages: int = 10
+) -> List[Dict]:
+    """
+    Fetch bulk Amazon reviews via Rainforest API (type=reviews).
+    Dedicated reviews endpoint — returns 10 reviews per page with full pagination.
+    Same API key as product data. ~1 credit per page.
+    """
+    domain = "amazon.in" if country == "IN" else "amazon.com"
+    all_reviews = []
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        for page in range(1, max_pages + 1):
+            params = {
+                "api_key": api_key,
+                "type": "reviews",
+                "asin": asin,
+                "amazon_domain": domain,
+                "review_stars_filter": "all_stars",
+                "sort_by": "most_recent",
+                "page": str(page),
+            }
+            try:
+                resp = await client.get(
+                    "https://api.rainforestapi.com/request", params=params
+                )
+                if resp.status_code != 200:
+                    break
+
+                data = resp.json()
+                if not data.get("request_info", {}).get("success", False):
+                    break
+
+                reviews = data.get("reviews", [])
+                if not reviews:
+                    break
+
+                for r in reviews:
+                    all_reviews.append({
+                        "body": r.get("body", ""),
+                        "rating": r.get("rating", 0),
+                        "title": r.get("title", ""),
+                        "date": r.get("date", {}).get("utc", r.get("date", {}).get("raw", "")),
+                        "author": r.get("author", {}).get("name", r.get("profile", {}).get("name", "")),
+                        "verified": r.get("verified_purchase", False),
+                        "helpful_votes": r.get("helpful_votes", 0),
+                        "source": "rainforest_reviews_api",
+                    })
+
+                # Check if there are more pages
+                pagination = data.get("pagination", {})
+                if not pagination.get("has_next_page", False):
+                    break
+
+                # Fewer than 10 reviews = likely last page
+                if len(reviews) < 8:
+                    break
+
+            except Exception:
+                break
+
+    return all_reviews
+
+
 async def _fetch_amazon_reviews_scrapingdog(
     asin: str, api_key: str, country: str = "IN", max_pages: int = 10
 ) -> List[Dict]:
